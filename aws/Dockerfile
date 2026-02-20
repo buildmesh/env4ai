@@ -1,4 +1,5 @@
-FROM python:3.9.18-slim-bookworm
+FROM python:3.14.3-slim
+COPY --from=docker.io/astral/uv:latest /uv /uvx /usr/local/bin/
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

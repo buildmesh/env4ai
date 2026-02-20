@@ -11,4 +11,4 @@ constructs = "<11.0.0,>=10.0.0"
 [dev-packages]
 
 [requires]
-python_version = "3.9"
+python_version = "3.14"
