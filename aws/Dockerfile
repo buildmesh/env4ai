@@ -28,5 +28,5 @@ RUN useradd --create-home user
 WORKDIR /home/user
 USER user
 
-COPY --chown=user:user ./gastown ./gastown
+COPY --chown=user:user . .
 RUN cd gastown && uv sync --frozen

@@ -1,3 +1,4 @@
+__pycache__
 *swp
 aws/**/cdk.context.json
 aws/**/cdk.out
