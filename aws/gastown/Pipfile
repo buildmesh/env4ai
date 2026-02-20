@@ -1,0 +1,14 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+aws-cdk-lib = "==2.108.1"
+boto3 = "1.28.73"
+constructs = "<11.0.0,>=10.0.0"
+
+[dev-packages]
+
+[requires]
+python_version = "3.9"

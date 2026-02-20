@@ -1,0 +1,16 @@
+version: "3.7"
+
+services:
+  aws:
+    build:
+      context: ./aws
+    volumes:
+      - ~/.aws:/home/user/.aws
+    cap_drop:
+      - ALL
+    secrets:
+      - aws_acct
+
+secrets:
+  aws_acct:
+    file: ./secrets/aws_acct

@@ -1,0 +1,4 @@
+*swp
+aws/**/cdk.context.json
+aws/**/cdk.out
+secrets
