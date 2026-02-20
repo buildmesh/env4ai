@@ -9,7 +9,7 @@ import base64
 
 class AwsWorkstationStack(Stack):
 
-    def __init__(self, scope: Construct, construct_id: str, user_data: str, **kwargs) -> None:
+    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         # Create a new VPC named 'WorkstationVPC'
@@ -47,7 +47,6 @@ class AwsWorkstationStack(Stack):
         ami_id = ubuntu_ami.get_image(self).image_id
 
         # User data script to install required tools and set up VNC
-        #filename = "init_gui.sh"
         filenames = [
             "deps.sh",
             "python.sh",
@@ -60,8 +59,6 @@ class AwsWorkstationStack(Stack):
         for filename in filenames:
             with open(f"init/{filename}", "r") as fd:
                 user_data_script += fd.read()
-
-        #user_data_script = ""
 
         user_data_base64 = base64.b64encode(user_data_script.encode("utf-8")).decode("utf-8")
 
@@ -86,7 +83,6 @@ class AwsWorkstationStack(Stack):
                     ec2.CfnSpotFleet.SpotFleetLaunchSpecificationProperty(
                         image_id=ami_id,
                         instance_type="t3.xlarge",
-                        #instance_type="t3.small",
                         key_name="aws_key",
                         security_groups=[{"groupId": sg.security_group_id}],
                         subnet_id=local_zone_subnet.ref,

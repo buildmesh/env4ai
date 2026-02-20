@@ -18,15 +18,8 @@ def get_account() -> str:
 
     raise RuntimeError("No AWS account found in CDK_DEFAULT_ACCOUNT or /run/secrets/aws_acct")
 
-user_data = {}
-for filename in os.listdir("init"):
-    path = os.path.join("init", filename)
-    name = filename.split(".")[0]
-    user_data = ""
-
 app = cdk.App()
 AwsWorkstationStack(app, "AwsWorkstationStack",
-    user_data=user_data,
     # If you don't specify 'env', this stack will be environment-agnostic.
     # Account/Region-dependent features and context lookups will not work,
     # but a single synthesized template can be deployed anywhere.
