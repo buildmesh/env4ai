@@ -13,9 +13,6 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --upgrade pip pipenv \
-    && pip cache purge
-
 RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
     && unzip awscliv2.zip \
     && rm awscliv2.zip \
@@ -32,4 +29,4 @@ WORKDIR /home/user
 USER user
 
 COPY --chown=user:user ./gastown ./gastown
-RUN cd gastown && pipenv sync
+RUN cd gastown && uv sync --frozen

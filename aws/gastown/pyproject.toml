@@ -1,0 +1,10 @@
+[project]
+name = "gastown"
+version = "0.1.0"
+description = "AWS CDK app for the development workstation stack"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "aws-cdk-lib==2.108.1",
+    "boto3==1.28.73",
+    "constructs>=10.0.0,<11.0.0",
+]
