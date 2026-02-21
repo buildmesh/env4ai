@@ -11,6 +11,10 @@ log() { printf '[agents] %s\n' "$*"; }
 log "Installing Codex..."
 sudo -E npm i -g @openai/codex
 
+# Install Claude Code
+log "Installing Claude Code..."
+curl -fsSL https://claude.ai/install.sh | bash
+
 # Install Beads
 log "Installing Beads..."
 export CGO_ENABLED=1
