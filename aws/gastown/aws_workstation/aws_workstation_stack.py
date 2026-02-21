@@ -1,5 +1,6 @@
 from aws_cdk import (
     CfnOutput,
+    Fn,
     Stack,
     aws_ec2 as ec2,
     aws_iam as iam,
@@ -7,9 +8,42 @@ from aws_cdk import (
 from constructs import Construct
 import base64
 
+
+def resolve_subnet_availability_zone(availability_zone_index: int = 0) -> str:
+    """Return a dynamic AZ token from the deployment region.
+
+    Args:
+        availability_zone_index: The zero-based index into region AZs.
+
+    Returns:
+        A CloudFormation token selecting an AZ from ``Fn::GetAZs``.
+
+    Raises:
+        ValueError: If ``availability_zone_index`` is negative.
+    """
+    if availability_zone_index < 0:
+        raise ValueError("availability_zone_index must be greater than or equal to 0")
+
+    return Fn.select(availability_zone_index, Fn.get_azs())
+
+
 class AwsWorkstationStack(Stack):
 
-    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
+    def __init__(
+        self,
+        scope: Construct,
+        construct_id: str,
+        availability_zone_index: int = 0,
+        **kwargs,
+    ) -> None:
+        """Create the workstation infrastructure stack.
+
+        Args:
+            scope: Construct scope.
+            construct_id: Logical construct id.
+            availability_zone_index: Selected AZ index for workstation subnet.
+            **kwargs: Additional ``Stack`` keyword args.
+        """
         super().__init__(scope, construct_id, **kwargs)
 
         # Create a new VPC named 'WorkstationVPC'
@@ -22,7 +56,7 @@ class AwsWorkstationStack(Stack):
         ec2.CfnVPCGatewayAttachment(self, "WorkstationIGWAttachment", vpc_id=vpc.vpc_id, internet_gateway_id=igw.ref)
 
         local_zone_subnet = ec2.CfnSubnet(self, "Lax1Subnet",
-            availability_zone="us-west-2a",  # Note the 'a' at the end
+            availability_zone=resolve_subnet_availability_zone(availability_zone_index),
             cidr_block="10.0.100.0/24",
             vpc_id=vpc.vpc_id,
             map_public_ip_on_launch=True

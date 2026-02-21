@@ -43,7 +43,7 @@ Use this checklist to track implementation progress for making region/AZ configu
   - Replace current `cdk.Environment(...)` wiring with resolved values only.
   - Remove silent fallback to `us-west-2`.
 
-- [ ] Task 4: Make stack AZ region-agnostic
+- [x] Task 4: Make stack AZ region-agnostic
   - In `aws/gastown/aws_workstation/aws_workstation_stack.py`, replace hardcoded subnet AZ with dynamic AZ selection (`Fn.get_azs` + `Fn.select`).
   - Ensure no region-specific literals remain for AZ/local-zone placement.
 
