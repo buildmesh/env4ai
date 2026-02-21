@@ -12,3 +12,5 @@ else ifeq ($(ACTION),STOP)
 else
 	@echo "Invalid ACTION=$(ACTION)"
 endif
+test:
+	cd aws/gastown && uv run python -m unittest discover -s tests/unit -v
