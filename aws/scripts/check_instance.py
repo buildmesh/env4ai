@@ -235,6 +235,7 @@ def main() -> int:
     public_ip = instance.get("PublicIpAddress")
 
     print(f"Newest instance: {instance_id} [{state}]")
+    print(f"Region: {region}")
     if launch_time:
         print(f"Launch time: {launch_time}")
 
