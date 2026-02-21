@@ -53,7 +53,7 @@ Use this checklist to track implementation progress for making region/AZ configu
   - Failure case: no env region and no usable config region raises `RuntimeError`.
   - Include tests for missing profile section and missing config file behavior.
 
-- [ ] Task 6: Upgrade stack tests from placeholder to real assertions
+- [x] Task 6: Upgrade stack tests from placeholder to real assertions
   - Assert synthesized subnet AZ is tokenized/dynamic, not a fixed `us-west-2*` literal.
   - Keep assertions resilient (resource-property checks, no brittle full-template snapshots).
 
@@ -68,3 +68,22 @@ Use this checklist to track implementation progress for making region/AZ configu
   - Update `README.md` with region/account precedence and profile examples.
   - Add an operational note that synth/deploy fails fast when active profile lacks `region`.
   - Final checklist pass against acceptance criteria.
+
+- [x] Task 9: Update `aws/scripts/check_instance.py` to resolve region from `~/.aws/config`
+  - Remove the hardcoded `--region` default (`us-west-2`) and align region resolution behavior with app conventions.
+  - Region/profile precedence for this script:
+    1. Explicit `--region` CLI value (trimmed, non-empty) wins.
+    2. Else `AWS_REGION` / `AWS_DEFAULT_REGION` env value (trimmed, non-empty).
+    3. Else resolve active profile region from `~/.aws/config`:
+       - Profile name from `--profile`, else `AWS_PROFILE`, else `default`.
+       - Section mapping:
+         - `default` -> `[default]`
+         - non-default `<name>` -> `[profile <name>]`
+    4. Else raise a user-facing error and exit non-zero.
+  - Error handling requirements:
+    - Missing `~/.aws/config` and no other resolved region path should produce a clear actionable error.
+    - Missing resolved profile section should produce a clear actionable error with section name.
+    - Missing `region` key in resolved profile section should produce a clear actionable error with profile name.
+  - Tests:
+    - Add/extend unit tests for expected case (`default` profile region), edge case (non-default profile), and failure case (unresolvable region).
+    - Keep AWS calls mocked; do not hit real AWS services.

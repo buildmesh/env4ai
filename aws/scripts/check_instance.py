@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import configparser
 from datetime import datetime
+import os
+from pathlib import Path
 from typing import Any
 
 import boto3
@@ -16,7 +19,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Look up the newest workstation instance and print SSH config guidance."
     )
-    parser.add_argument("--region", default="us-west-2", help="AWS region to query.")
+    parser.add_argument(
+        "--region",
+        default=None,
+        help="Optional AWS region to query. Falls back to env vars or ~/.aws/config when omitted.",
+    )
     parser.add_argument(
         "--profile",
         default=None,
@@ -48,6 +55,76 @@ def parse_args() -> argparse.Namespace:
         help="SSH identity file path to show in the SSH config snippet.",
     )
     return parser.parse_args()
+
+
+def normalize_optional(value: str | None) -> str | None:
+    """Return stripped text when non-empty, otherwise None."""
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized if normalized else None
+
+
+def get_profile_name(cli_profile: str | None, env: dict[str, str] | None = None) -> str:
+    """Resolve the profile name from CLI, then environment, then default."""
+    environment = env or os.environ
+    return (
+        normalize_optional(cli_profile)
+        or normalize_optional(environment.get("AWS_PROFILE"))
+        or "default"
+    )
+
+
+def get_profile_section_name(profile_name: str) -> str:
+    """Map profile name to ~/.aws/config section name."""
+    return "default" if profile_name == "default" else f"profile {profile_name}"
+
+
+def load_region_from_config(profile_name: str, config_path: Path) -> str:
+    """Load region for the given profile from ~/.aws/config."""
+    if not config_path.is_file():
+        raise RuntimeError(
+            "Unable to resolve AWS region: ~/.aws/config was not found and no region was provided via --region, AWS_REGION, or AWS_DEFAULT_REGION."
+        )
+
+    parser = configparser.ConfigParser()
+    parser.read(config_path)
+    section_name = get_profile_section_name(profile_name)
+
+    if not parser.has_section(section_name):
+        raise RuntimeError(
+            f"Unable to resolve AWS region: profile section '[{section_name}]' was not found in ~/.aws/config."
+        )
+
+    region = normalize_optional(parser.get(section_name, "region", fallback=None))
+    if not region:
+        raise RuntimeError(
+            f"Unable to resolve AWS region: no 'region' value found in profile '[{profile_name}]' in ~/.aws/config."
+        )
+    return region
+
+
+def get_region(
+    cli_region: str | None,
+    cli_profile: str | None,
+    env: dict[str, str] | None = None,
+    config_path: Path | None = None,
+) -> str:
+    """Resolve region from CLI, env vars, then ~/.aws/config for the active profile."""
+    environment = env or os.environ
+    explicit_region = normalize_optional(cli_region)
+    if explicit_region:
+        return explicit_region
+
+    env_region = normalize_optional(environment.get("AWS_REGION")) or normalize_optional(
+        environment.get("AWS_DEFAULT_REGION")
+    )
+    if env_region:
+        return env_region
+
+    profile_name = get_profile_name(cli_profile, environment)
+    target_path = config_path or (Path.home() / ".aws" / "config")
+    return load_region_from_config(profile_name=profile_name, config_path=target_path)
 
 
 def get_spot_fleet_request_id(
@@ -128,7 +205,13 @@ def build_ssh_config_snippet(host_alias: str, ip_address: str, ssh_user: str, id
 def main() -> int:
     """Run instance lookup and print user-facing connection instructions."""
     args = parse_args()
-    session = boto3.Session(profile_name=args.profile, region_name=args.region)
+    try:
+        region = get_region(cli_region=args.region, cli_profile=args.profile)
+    except RuntimeError as exc:
+        print(f"Error: {exc}")
+        return 1
+
+    session = boto3.Session(profile_name=normalize_optional(args.profile), region_name=region)
     ec2_client = session.client("ec2")
     cloudformation_client = session.client("cloudformation")
 
