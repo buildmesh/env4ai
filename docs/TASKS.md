@@ -47,7 +47,7 @@ Use this checklist to track implementation progress for making region/AZ configu
   - In `aws/gastown/aws_workstation/aws_workstation_stack.py`, replace hardcoded subnet AZ with dynamic AZ selection (`Fn.get_azs` + `Fn.select`).
   - Ensure no region-specific literals remain for AZ/local-zone placement.
 
-- [ ] Task 5: Add resolver unit tests (new test module)
+- [x] Task 5: Add resolver unit tests (new test module)
   - Expected case: default profile region read from config.
   - Edge case: non-default profile via `AWS_PROFILE`.
   - Failure case: no env region and no usable config region raises `RuntimeError`.
