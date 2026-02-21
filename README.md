@@ -10,7 +10,7 @@ Current environment:
 - Docker + Docker Compose
 - GNU Make
 - AWS account access
-- AWS CLI configured with a `default` profile (`~/.aws` is mounted into the container)
+- AWS CLI configured with a profile in `~/.aws/config` that includes a `region` value (`~/.aws` is mounted into the container)
 
 ## One-Time Setup
 
@@ -26,22 +26,16 @@ Current environment:
 
      `~/.ssh/aws_key.pem`
 
-4. Create the account-id secret file:
+4. Create the account-id secret file (default source for AWS account):
 
    ```bash
    mkdir -p secrets
    echo "<YOUR_AWS_ACCOUNT_ID>" > secrets/aws_acct
    ```
 
+   By default this is mounted as Docker secret `aws_acct` at `/run/secrets/aws_acct`. You can override account resolution using options/environment variables (for example `CDK_DEFAULT_ACCOUNT`).
+
 ## Usage
-
-### Enter the tooling container
-
-```bash
-make
-```
-
-This opens a shell inside the Docker container with AWS/CDK tooling.
 
 ### Start `gastown` environment
 
@@ -50,6 +44,12 @@ make gastown
 ```
 
 This deploys the CDK stack, creates/starts the EC2 workstation, and prints SSH config instructions.
+
+After applying the SSH config update instructions, run:
+
+```bash
+ssh gastown-workstation
+```
 
 Note: AWS creates `aws-ec2-spot-fleet-tagging-role` automatically the first time Spot Fleet needs it.
 
@@ -61,9 +61,18 @@ make gastown ACTION=STOP
 
 This destroys the deployed stack and stops billing for the workstation resources.
 
+### Enter the tooling container
+
+```bash
+make
+```
+
+This opens a shell inside the Docker container with AWS/CDK tooling.
+
 ## Notes
 
-- Default region is `us-west-2`.
+- Region is read from `~/.aws/config` (active profile).
+- Region/account can be overridden with options/environment variables (for example `CDK_DEFAULT_REGION`, `CDK_DEFAULT_ACCOUNT`, and `--region` where supported by scripts/commands).
 - SSH is currently open on port 22 to anywhere (`0.0.0.0/0`); restrict this before broader use.
 - Costs apply while infrastructure is running.
 
