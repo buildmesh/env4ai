@@ -96,17 +96,6 @@ class AwsWorkstationStack(Stack):
 
         user_data_base64 = base64.b64encode(user_data_script.encode("utf-8")).decode("utf-8")
 
-        # IAM Role for EC2
-        role = iam.Role(self, "WorkstationInstanceRole",
-            assumed_by=iam.ServicePrincipal("ec2.amazonaws.com"),
-            managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore"),
-                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEC2ReadOnlyAccess"),
-            ]
-        )
-
-        instance_profile = iam.CfnInstanceProfile(self, "WorkstationInstanceProfile", roles=[role.role_name])
-
         # Spot Fleet Request
         ec2.CfnSpotFleet(self, "WorkstationSpotFleet",
             spot_fleet_request_config_data=ec2.CfnSpotFleet.SpotFleetRequestConfigDataProperty(
@@ -120,9 +109,6 @@ class AwsWorkstationStack(Stack):
                         key_name="aws_key",
                         security_groups=[{"groupId": sg.security_group_id}],
                         subnet_id=local_zone_subnet.ref,
-                        iam_instance_profile=ec2.CfnSpotFleet.IamInstanceProfileSpecificationProperty(
-                            arn=instance_profile.attr_arn
-                        ),
                         user_data=user_data_base64,
                         block_device_mappings=[
                             {
