@@ -147,8 +147,8 @@ class CheckScriptTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             get_spot_fleet_request_id(
                 cloudformation_client=cloudformation_client,
-                stack_name="AwsWorkstationStack",
-                logical_resource_id="WorkstationSpotFleet",
+                stack_name="GastownWorkstationStack",
+                logical_resource_id="GastownSpotFleet",
             )
 
     def test_build_ssh_config_snippet(self) -> None:
@@ -172,8 +172,8 @@ class CheckScriptTests(unittest.TestCase):
             {
                 "region": "us-west-2",
                 "profile": None,
-                "stack_name": "AwsWorkstationStack",
-                "spot_fleet_logical_id": "WorkstationSpotFleet",
+                "stack_name": "GastownWorkstationStack",
+                "spot_fleet_logical_id": "GastownSpotFleet",
                 "ssh_host_alias": "gastown-workstation",
                 "ssh_user": "ubuntu",
                 "identity_file": "~/.ssh/aws_key.pem",
@@ -210,8 +210,8 @@ class CheckScriptTests(unittest.TestCase):
             {
                 "region": "us-east-1",
                 "profile": None,
-                "stack_name": "AwsWorkstationStack",
-                "spot_fleet_logical_id": "WorkstationSpotFleet",
+                "stack_name": "GastownWorkstationStack",
+                "spot_fleet_logical_id": "GastownSpotFleet",
                 "ssh_host_alias": "gastown-workstation",
                 "ssh_user": "ubuntu",
                 "identity_file": "~/.ssh/aws_key.pem",
@@ -248,8 +248,8 @@ class CheckScriptTests(unittest.TestCase):
             {
                 "region": None,
                 "profile": None,
-                "stack_name": "AwsWorkstationStack",
-                "spot_fleet_logical_id": "WorkstationSpotFleet",
+                "stack_name": "GastownWorkstationStack",
+                "spot_fleet_logical_id": "GastownSpotFleet",
                 "ssh_host_alias": "gastown-workstation",
                 "ssh_user": "ubuntu",
                 "identity_file": "~/.ssh/aws_key.pem",

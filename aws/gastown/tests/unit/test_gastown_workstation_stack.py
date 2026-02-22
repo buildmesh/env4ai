@@ -3,13 +3,13 @@ import unittest
 import aws_cdk as core
 import aws_cdk.assertions as assertions
 
-from aws_workstation.aws_workstation_stack import (
-    AwsWorkstationStack,
+from gastown_workstation.gastown_workstation_stack import (
+    GastownWorkstationStack,
     resolve_subnet_availability_zone,
 )
 
 
-class AwsWorkstationStackTests(unittest.TestCase):
+class GastownWorkstationStackTests(unittest.TestCase):
     @staticmethod
     def _test_env() -> core.Environment:
         """Return a deterministic CDK env for stack synthesis in tests."""
@@ -18,7 +18,7 @@ class AwsWorkstationStackTests(unittest.TestCase):
     def test_subnet_az_uses_dynamic_get_azs_select_by_default(self) -> None:
         """Expected: default subnet AZ is dynamic from deployment region."""
         app = core.App()
-        stack = AwsWorkstationStack(
+        stack = GastownWorkstationStack(
             app, "aws-workstation-default-az", env=self._test_env()
         )
         template = assertions.Template.from_stack(stack)
@@ -38,7 +38,7 @@ class AwsWorkstationStackTests(unittest.TestCase):
     def test_subnet_az_allows_non_default_index(self) -> None:
         """Edge: stack supports selecting a non-default AZ index."""
         app = core.App()
-        stack = AwsWorkstationStack(
+        stack = GastownWorkstationStack(
             app,
             "aws-workstation-secondary-az",
             availability_zone_index=1,

@@ -6,7 +6,7 @@ from typing import Mapping
 
 import aws_cdk as cdk
 
-from aws_workstation.aws_workstation_stack import AwsWorkstationStack
+from gastown_workstation.gastown_workstation_stack import GastownWorkstationStack
 
 def get_profile_name(env: Mapping[str, str] | None = None) -> str:
     """Return the active AWS profile name.
@@ -142,9 +142,9 @@ def get_account(
 def main() -> None:
     """Synthesize the CDK app for this environment."""
     app = cdk.App()
-    AwsWorkstationStack(
+    GastownWorkstationStack(
         app,
-        "AwsWorkstationStack",
+        "GastownWorkstationStack",
         env=cdk.Environment(account=get_account(), region=get_region()),
     )
     app.synth()

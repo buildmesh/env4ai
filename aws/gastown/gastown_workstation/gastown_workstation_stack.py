@@ -27,7 +27,7 @@ def resolve_subnet_availability_zone(availability_zone_index: int = 0) -> str:
     return Fn.select(availability_zone_index, Fn.get_azs())
 
 
-class AwsWorkstationStack(Stack):
+class GastownWorkstationStack(Stack):
 
     def __init__(
         self,
@@ -46,14 +46,14 @@ class AwsWorkstationStack(Stack):
         """
         super().__init__(scope, construct_id, **kwargs)
 
-        # Create a new VPC named 'WorkstationVPC'
-        vpc = ec2.Vpc(self, "WorkstationVPC",
+        # Create a new VPC named 'GastownVPC'
+        vpc = ec2.Vpc(self, "GastownVPC",
             max_azs=1,
             subnet_configuration=[]
         )
 
-        igw = ec2.CfnInternetGateway(self, "WorkstationIGW")
-        ec2.CfnVPCGatewayAttachment(self, "WorkstationIGWAttachment", vpc_id=vpc.vpc_id, internet_gateway_id=igw.ref)
+        igw = ec2.CfnInternetGateway(self, "GastownIGW")
+        ec2.CfnVPCGatewayAttachment(self, "GastownIGWAttachment", vpc_id=vpc.vpc_id, internet_gateway_id=igw.ref)
 
         local_zone_subnet = ec2.CfnSubnet(self, "Lax1Subnet",
             availability_zone=resolve_subnet_availability_zone(availability_zone_index),
@@ -63,12 +63,12 @@ class AwsWorkstationStack(Stack):
         )
 
 
-        route_table = ec2.CfnRouteTable(self, "WorkstationRouteTable", vpc_id=vpc.vpc_id)
-        ec2.CfnRoute(self, "WorkstationDefaultRoute", route_table_id=route_table.ref, destination_cidr_block="0.0.0.0/0", gateway_id=igw.ref)
-        ec2.CfnSubnetRouteTableAssociation(self, "WorkstationSubnetRouteTableAssociation", subnet_id=local_zone_subnet.ref, route_table_id=route_table.ref)
+        route_table = ec2.CfnRouteTable(self, "GastownRouteTable", vpc_id=vpc.vpc_id)
+        ec2.CfnRoute(self, "GastownDefaultRoute", route_table_id=route_table.ref, destination_cidr_block="0.0.0.0/0", gateway_id=igw.ref)
+        ec2.CfnSubnetRouteTableAssociation(self, "GastownSubnetRouteTableAssociation", subnet_id=local_zone_subnet.ref, route_table_id=route_table.ref)
 
         # Security group for SSH (VNC tunneled over SSH)
-        sg = ec2.SecurityGroup(self, "WorkstationSG", vpc=vpc)
+        sg = ec2.SecurityGroup(self, "GastownSG", vpc=vpc)
         sg.add_ingress_rule(ec2.Peer.any_ipv4(), ec2.Port.tcp(22), "Allow SSH")
 
         # Find latest Ubuntu 22.04 LTS AMI
@@ -97,7 +97,7 @@ class AwsWorkstationStack(Stack):
         user_data_base64 = base64.b64encode(user_data_script.encode("utf-8")).decode("utf-8")
 
         # Spot Fleet Request
-        ec2.CfnSpotFleet(self, "WorkstationSpotFleet",
+        ec2.CfnSpotFleet(self, "GastownSpotFleet",
             spot_fleet_request_config_data=ec2.CfnSpotFleet.SpotFleetRequestConfigDataProperty(
                 iam_fleet_role="arn:aws:iam::{}:role/aws-ec2-spot-fleet-tagging-role".format(self.account),
                 target_capacity=1,
