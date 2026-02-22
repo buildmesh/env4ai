@@ -41,7 +41,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--ssh-host-alias",
-        default="gastown-workstation",
+        default=f"{Path.cwd().name}-workstation",
         help="Host alias to show in the SSH config snippet.",
     )
     parser.add_argument(
