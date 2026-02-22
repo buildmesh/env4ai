@@ -15,6 +15,8 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 
 def parse_args() -> argparse.Namespace:
+    name = Path.cwd().name
+
     """Parse command-line arguments for instance lookup."""
     parser = argparse.ArgumentParser(
         description="Look up the newest workstation instance and print SSH config guidance."
@@ -31,17 +33,17 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--stack-name",
-        default="AwsWorkstationStack",
+        default=f"{name.capitalize()}WorkstationStack",
         help="CloudFormation stack name.",
     )
     parser.add_argument(
         "--spot-fleet-logical-id",
-        default="WorkstationSpotFleet",
+        default=f"{name.capitalize()}SpotFleet",
         help="Logical ID of the Spot Fleet resource in the stack.",
     )
     parser.add_argument(
         "--ssh-host-alias",
-        default=f"{Path.cwd().name}-workstation",
+        default=f"{name}-workstation",
         help="Host alias to show in the SSH config snippet.",
     )
     parser.add_argument(
