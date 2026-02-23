@@ -37,5 +37,14 @@ else ifeq ($(ACTION),STOP)
 else
 	@echo "Invalid ACTION=$(ACTION)"
 endif
+openclaw:
+ifeq ($(ACTION),START)
+	$(DOCKER_COMPOSE_RUN) aws bash -lc "cd /home/user/openclaw && uv run ../scripts/deploy_workstation.py --environment openclaw --stack-dir /home/user/openclaw --stack-name OpenclawWorkstationStack"
+else ifeq ($(ACTION),STOP)
+	$(DOCKER_COMPOSE_RUN) aws bash -lc "cd /home/user/openclaw && uv run ../scripts/stop_workstation.py --environment openclaw --stack-dir /home/user/openclaw --stack-name OpenclawWorkstationStack"
+else
+	@echo "Invalid ACTION=$(ACTION)"
+endif
 test:
 	cd aws/gastown && uv run python -m unittest discover -s tests/unit -v
+	cd aws/openclaw && uv run python -m unittest discover -s tests/unit -v
