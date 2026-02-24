@@ -1,5 +1,5 @@
-FROM python:3.14.3-slim
-COPY --from=docker.io/astral/uv:latest /uv /uvx /usr/local/bin/
+FROM python:3.14.3-slim@sha256:486b8092bfb12997e10d4920897213a06563449c951c5506c2a2cfaf591c599f
+COPY --from=docker.io/astral/uv:python3.13-alpine@sha256:8da29d4ddc9e3fd77c32d0ba090620e2cf11263c81f98a6b5e918508a055c273 /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
