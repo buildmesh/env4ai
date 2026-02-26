@@ -85,6 +85,7 @@ class GastownWorkstationStack(Stack):
             "deps.sh",
             "python.sh",
             "docker.sh",
+            "android.sh",
             "agents.sh",
             "gastown.sh"
         ]
