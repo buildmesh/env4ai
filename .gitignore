@@ -3,3 +3,9 @@ __pycache__
 aws/**/cdk.context.json
 aws/**/cdk.out
 secrets
+
+# Gas Town (added by gt)
+/.runtime/
+/.claude/commands/
+/.logs/
+state.json 
