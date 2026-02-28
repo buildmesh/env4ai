@@ -46,3 +46,6 @@ sudo -u ubuntu -H bash -lc 'uv tool install showboat'
 
 echo "export PATH=\"/home/ubuntu/.local/bin:/home/ubuntu/go/bin:$PATH\"" >> /home/ubuntu/.bashrc
 export PATH="/home/ubuntu/.local/bin:/home/ubuntu/go/bin:$PATH"
+
+# Install OpenSpec
+npm install -g @fission-ai/openspec@latest
