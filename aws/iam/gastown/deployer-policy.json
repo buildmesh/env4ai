@@ -54,11 +54,19 @@
         "ec2:DescribeSecurityGroups",
         "ec2:DescribeImages",
         "ec2:DescribeAvailabilityZones",
+        "ec2:DescribeVolumes",
+        "ec2:DescribeVolumeStatus",
+        "ec2:DescribeVolumesModifications",
         "ec2:DescribeSpotFleetRequests",
         "ec2:DescribeSpotFleetInstances",
         "ec2:DescribeInstances",
         "ec2:RequestSpotFleet",
-        "ec2:CancelSpotFleetRequests"
+        "ec2:CancelSpotFleetRequests",
+        "ec2:AttachVolume",
+        "ec2:DetachVolume",
+        "ec2:CreateVolume",
+        "ec2:DeleteVolume",
+        "ec2:ModifyVolume"
       ],
       "Resource": "*"
     },

@@ -15,4 +15,4 @@ export PATH="$PATH:/home/ubuntu/.local/bin"
 echo "export PATH=\"$PATH:/home/ubuntu/.local/bin\"" >> /home/ubuntu/.bashrc
 
 sudo bash -c 'curl -L https://github.com/dolthub/dolt/releases/latest/download/install.sh | bash'
-
+sudo -u bash -lc 'mkdir /home/ubuntu/gt'
