@@ -76,6 +76,7 @@ Behavior:
 - `AMI_LIST=1` shows environment-scoped AMIs with ID/state/creation date for operator choice.
 - `AMI_PICK=1` is valid only with `AMI_LIST=1` and prompts for numbered AMI selection.
 - `AMI_LOAD` and `AMI_LIST` are mutually exclusive.
+- AMI list/load modes run an IAM preflight before deploy mutation steps and fail early with remediation if `ec2:DescribeImages` is missing.
 - Without AMI options, deploy behavior remains unchanged and uses the default Ubuntu base image.
 
 ### Stop/destroy `gastown` environment
