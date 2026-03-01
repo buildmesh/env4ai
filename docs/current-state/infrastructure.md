@@ -39,6 +39,7 @@ Defined in [`aws/gastown/gastown_workstation/gastown_workstation_stack.py`](../.
 - Deploy/start: `make gastown` (`ACTION=START` default) via [`Makefile`](../../Makefile)
   - AMI controls: `AMI_LOAD`, `AMI_LIST`, `AMI_PICK` via [`aws/scripts/deploy_workstation.py`](../../aws/scripts/deploy_workstation.py)
 - Destroy/stop: `make gastown ACTION=STOP`
+  - No save-on-stop Make variable is currently implemented; AMI preservation requires manual EC2 `create-image` + `wait image-available` before destroy.
 - Post-deploy instance lookup + SSH snippet:
   - [`aws/scripts/check_instance.py`](../../aws/scripts/check_instance.py)
 
@@ -70,3 +71,13 @@ Rollback (disable AMI lifecycle options):
 - Broad SSH ingress is operationally simple but security-sensitive.
 - Spot Fleet behavior and instance availability depend on regional capacity/pricing.
 - Deployment relies on local credential/config correctness and mounted secrets.
+- AMI listing can include non-`available` states (`pending`, `failed`); operators should deploy from `available` images only.
+- AMI load fails fast when the exact `<environment>_<tag>` name is missing, which blocks deployment by design.
+
+## Rollback Guidance
+
+To revert to pre-AMI-option behavior:
+
+1. Clear `AMI_LOAD`, `AMI_LIST`, and `AMI_PICK` from the shell/session.
+2. Run deploy with `make gastown` so the stack uses default Ubuntu AMI resolution.
+3. Run stop with `make gastown ACTION=STOP` (no AMI preservation automation in current Make flow).

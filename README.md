@@ -53,7 +53,7 @@ ssh gastown-workstation
 
 Note: AWS creates `aws-ec2-spot-fleet-tagging-role` automatically the first time Spot Fleet needs it.
 
-Optional deploy-time AMI controls are available through environment variables:
+Optional AMI lifecycle controls are available through environment variables:
 
 ```bash
 # Deploy using an exact AMI name: gastown_20260301
@@ -74,10 +74,44 @@ Behavior:
 - `AMI_BOOTSTRAP=1` runs bootstrap userData even when deploying from a saved AMI (default is skip for restored AMIs).
 - If requested AMI is missing, deploy fails before Spot request creation.
 - `AMI_LIST=1` shows environment-scoped AMIs with ID/state/creation date for operator choice.
-- `AMI_PICK=1` is valid only with `AMI_LIST=1` and prompts for numbered AMI selection.
-- `AMI_LOAD` and `AMI_LIST` are mutually exclusive.
+- `AMI_PICK=1` is only valid with `AMI_LIST=1`; invalid combinations fail fast.
+- `AMI_LOAD` and `AMI_LIST` are mutually exclusive; invalid combinations fail fast.
 - AMI list/load modes run an IAM preflight before deploy mutation steps and fail early with remediation if `ec2:DescribeImages` is missing.
 - Without AMI options, deploy behavior remains unchanged and uses the default Ubuntu base image.
+
+AMI naming convention and states:
+- Use AMI names in the format `<environment>_<tag>` (for example `gastown_20260301`).
+- Listed states come from EC2 image state (for example `pending`, `available`, `failed`).
+- Deploy from a listed AMI should use an `available` image; `pending` images are still creating and may fail to launch.
+
+Save-on-stop workflow:
+- There is currently no `AMI_SAVE`/`AMI_TAG` Make variable in this repo.
+- To preserve the current workstation before destroy, create and wait for an AMI manually, then run stop:
+
+```bash
+# Example: create a named AMI from your current workstation instance
+aws ec2 create-image \
+  --instance-id <instance-id> \
+  --name gastown_20260301 \
+  --no-reboot
+
+# Wait until the image is usable before destroy
+aws ec2 wait image-available --image-ids <ami-id>
+
+# Then destroy the stack
+make gastown ACTION=STOP
+```
+
+Rollback to legacy behavior:
+- Remove AMI lifecycle env vars from your shell/session:
+
+```bash
+unset AMI_LOAD AMI_LIST AMI_PICK
+```
+
+- Use the original commands:
+  - Deploy: `make gastown`
+  - Stop: `make gastown ACTION=STOP`
 
 ### Stop/destroy `gastown` environment
 
