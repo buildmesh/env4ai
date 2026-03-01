@@ -151,6 +151,22 @@ class GastownWorkstationStackTests(unittest.TestCase):
             },
         )
 
+    def test_ami_override_conflicts_with_selected_ami_id(self) -> None:
+        """Failure: conflicting AMI override values are rejected."""
+        app = core.App()
+        with self.assertRaisesRegex(
+            ValueError,
+            "ami_id_override conflicts with selected_ami_id",
+        ):
+            GastownWorkstationStack(
+                app,
+                "aws-workstation-conflicting-ami-overrides",
+                ami_id_override="ami-override123",
+                ami_source="selected",
+                selected_ami_id="ami-different456",
+                env=self._test_env(),
+            )
+
     def test_selected_ami_requires_explicit_ami_id(self) -> None:
         """Failure: selected source mode must provide a concrete AMI ID."""
         app = core.App()
