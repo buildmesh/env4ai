@@ -11,6 +11,7 @@ from deploy_workstation import (  # noqa: E402
     build_ami_lookup_error_message,
     deploy_stack,
     list_environment_images,
+    main,
     pick_image_interactively,
     resolve_exact_image_id,
     run_command,
@@ -19,6 +20,162 @@ from deploy_workstation import (  # noqa: E402
 
 
 class DeployWorkstationScriptTests(unittest.TestCase):
+    @staticmethod
+    def _args() -> object:
+        """Build common argument payload used by main-flow tests."""
+        return type(
+            "Args",
+            (),
+            {
+                "environment": "gastown",
+                "stack_dir": "/tmp/gastown",
+                "stack_name": "GastownWorkstationStack",
+                "profile": None,
+                "region": None,
+            },
+        )()
+
+    def test_main_deploys_default_path_when_no_ami_controls(self) -> None:
+        """Expected: baseline deploy path skips AMI selection and deploys normally."""
+        ec2_client = Mock()
+        with (
+            patch("deploy_workstation.parse_args", return_value=self._args()),
+            patch.dict(
+                "deploy_workstation.os.environ",
+                {"AWS_REGION": "us-west-2"},
+                clear=True,
+            ),
+            patch("deploy_workstation.make_ec2_client", return_value=ec2_client),
+            patch("deploy_workstation.deploy_stack") as deploy_stack_mock,
+            patch("deploy_workstation.run_post_deploy_check") as post_check_mock,
+        ):
+            result = main()
+
+        self.assertEqual(0, result)
+        deploy_stack_mock.assert_called_once_with(stack_dir="/tmp/gastown", ami_id=None)
+        post_check_mock.assert_called_once_with(
+            stack_dir="/tmp/gastown",
+            stack_name="GastownWorkstationStack",
+        )
+
+    def test_main_loads_exact_ami_when_ami_load_tag_is_set(self) -> None:
+        """Expected: AMI_LOAD resolves exact tag name and deploys with that AMI ID."""
+        ec2_client = Mock()
+        with (
+            patch("deploy_workstation.parse_args", return_value=self._args()),
+            patch.dict(
+                "deploy_workstation.os.environ",
+                {"AWS_REGION": "us-west-2", "AMI_LOAD": "20260301"},
+                clear=True,
+            ),
+            patch("deploy_workstation.make_ec2_client", return_value=ec2_client),
+            patch("deploy_workstation.resolve_exact_image_id", return_value="ami-load"),
+            patch("deploy_workstation.deploy_stack") as deploy_stack_mock,
+            patch("deploy_workstation.run_post_deploy_check") as post_check_mock,
+        ):
+            result = main()
+
+        self.assertEqual(0, result)
+        deploy_stack_mock.assert_called_once_with(stack_dir="/tmp/gastown", ami_id="ami-load")
+        post_check_mock.assert_called_once_with(
+            stack_dir="/tmp/gastown",
+            stack_name="GastownWorkstationStack",
+        )
+
+    def test_main_raises_when_ami_load_tag_does_not_exist(self) -> None:
+        """Failure: AMI_LOAD aborts deploy when the exact AMI lookup fails."""
+        ec2_client = Mock()
+        with (
+            patch("deploy_workstation.parse_args", return_value=self._args()),
+            patch.dict(
+                "deploy_workstation.os.environ",
+                {"AWS_REGION": "us-west-2", "AMI_LOAD": "missing"},
+                clear=True,
+            ),
+            patch("deploy_workstation.make_ec2_client", return_value=ec2_client),
+            patch(
+                "deploy_workstation.resolve_exact_image_id",
+                side_effect=RuntimeError("Requested AMI 'gastown_missing' was not found."),
+            ),
+            patch("deploy_workstation.deploy_stack") as deploy_stack_mock,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Requested AMI 'gastown_missing' was not found."):
+                main()
+
+        deploy_stack_mock.assert_not_called()
+
+    def test_main_lists_images_and_exits_without_deploy_when_pick_disabled(self) -> None:
+        """Edge: AMI_LIST without AMI_PICK lists entries and skips deployment."""
+        ec2_client = Mock()
+        listed_images = [
+            {
+                "image_id": "ami-list",
+                "name": "gastown_saved",
+                "state": "available",
+                "creation_date": "2026-02-15T00:00:00.000Z",
+            }
+        ]
+        with (
+            patch("deploy_workstation.parse_args", return_value=self._args()),
+            patch.dict(
+                "deploy_workstation.os.environ",
+                {"AWS_REGION": "us-west-2", "AMI_LIST": "1"},
+                clear=True,
+            ),
+            patch("deploy_workstation.make_ec2_client", return_value=ec2_client),
+            patch("deploy_workstation.list_environment_images", return_value=listed_images),
+            patch("deploy_workstation.print_image_list") as print_image_list_mock,
+            patch("deploy_workstation.deploy_stack") as deploy_stack_mock,
+            patch("deploy_workstation.run_post_deploy_check") as post_check_mock,
+        ):
+            result = main()
+
+        self.assertEqual(0, result)
+        print_image_list_mock.assert_called_once_with(listed_images)
+        deploy_stack_mock.assert_not_called()
+        post_check_mock.assert_not_called()
+
+    def test_main_deploys_selected_image_when_list_and_pick_enabled(self) -> None:
+        """Expected: AMI_LIST+AMI_PICK deploys using the chosen environment AMI."""
+        ec2_client = Mock()
+        listed_images = [
+            {
+                "image_id": "ami-a",
+                "name": "gastown_a",
+                "state": "available",
+                "creation_date": "2026-02-15T00:00:00.000Z",
+            },
+            {
+                "image_id": "ami-b",
+                "name": "gastown_b",
+                "state": "available",
+                "creation_date": "2026-02-16T00:00:00.000Z",
+            },
+        ]
+        selected_image = listed_images[1]
+        with (
+            patch("deploy_workstation.parse_args", return_value=self._args()),
+            patch.dict(
+                "deploy_workstation.os.environ",
+                {"AWS_REGION": "us-west-2", "AMI_LIST": "1", "AMI_PICK": "1"},
+                clear=True,
+            ),
+            patch("deploy_workstation.make_ec2_client", return_value=ec2_client),
+            patch("deploy_workstation.list_environment_images", return_value=listed_images),
+            patch("deploy_workstation.print_image_list"),
+            patch("deploy_workstation.pick_image_interactively", return_value=selected_image),
+            patch("deploy_workstation.deploy_stack") as deploy_stack_mock,
+            patch("deploy_workstation.run_post_deploy_check") as post_check_mock,
+        ):
+            result = main()
+
+        self.assertEqual(0, result)
+        deploy_stack_mock.assert_called_once_with(stack_dir="/tmp/gastown", ami_id="ami-b")
+        post_check_mock.assert_called_once_with(
+            stack_dir="/tmp/gastown",
+            stack_name="GastownWorkstationStack",
+        )
+
     def test_resolve_exact_image_id_returns_match(self) -> None:
         """Expected: exact-name AMI lookup returns matched image id."""
         ec2_client = Mock()
