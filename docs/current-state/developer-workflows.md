@@ -43,6 +43,15 @@ Rollback guidance for disabling AMI options and returning to default base-image 
   - `make gastown`
 - Expected rollback result: deploy proceeds without AMI override context and uses the default Ubuntu image path.
 
+Validation and failure behavior:
+- `AMI_PICK=1` without `AMI_LIST=1` fails with a validation error.
+- `AMI_LOAD` together with `AMI_LIST=1` fails with a validation error.
+- Missing `AMI_LOAD` target name (`<environment>_<tag>`) fails before CDK deploy.
+
+Save-on-stop workflow status:
+- No `AMI_SAVE`/`AMI_TAG` variable is currently implemented in `Makefile`.
+- Operators must manually create and wait for an AMI before running `make gastown ACTION=STOP` when preservation is required.
+
 ## CDK App Workflows
 
 From [`aws/gastown/README.md`](../../aws/gastown/README.md):
@@ -70,6 +79,15 @@ After deployment:
 - Region/account resolution errors: inspect [`aws/gastown/app.py`](../../aws/gastown/app.py) and mounted secrets/config.
 - Instance discovery/SSH issues: inspect [`aws/scripts/check_instance.py`](../../aws/scripts/check_instance.py).
 - Stack-level provisioning behavior: inspect [`aws/gastown/gastown_workstation/gastown_workstation_stack.py`](../../aws/gastown/gastown_workstation/gastown_workstation_stack.py).
+- AMI load/list/pick behavior and errors: inspect [`aws/scripts/deploy_workstation.py`](../../aws/scripts/deploy_workstation.py).
+
+## Rollback To Legacy Flow
+
+When AMI lifecycle options cause issues, return to the baseline workflow:
+
+1. Remove AMI environment variables (`unset AMI_LOAD AMI_LIST AMI_PICK`).
+2. Deploy with no AMI flags (`make gastown`).
+3. Stop with no AMI flags (`make gastown ACTION=STOP`).
 
 ## Contributor Checklist For New Changes
 
