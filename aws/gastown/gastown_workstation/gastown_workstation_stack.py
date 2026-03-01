@@ -34,6 +34,7 @@ class GastownWorkstationStack(Stack):
         scope: Construct,
         construct_id: str,
         availability_zone_index: int = 0,
+        ami_id_override: str | None = None,
         **kwargs,
     ) -> None:
         """Create the workstation infrastructure stack.
@@ -42,6 +43,7 @@ class GastownWorkstationStack(Stack):
             scope: Construct scope.
             construct_id: Logical construct id.
             availability_zone_index: Selected AZ index for workstation subnet.
+            ami_id_override: Optional explicit AMI ID used for deploy-time restore flows.
             **kwargs: Additional ``Stack`` keyword args.
         """
         super().__init__(scope, construct_id, **kwargs)
@@ -71,14 +73,15 @@ class GastownWorkstationStack(Stack):
         sg = ec2.SecurityGroup(self, "GastownSG", vpc=vpc)
         sg.add_ingress_rule(ec2.Peer.any_ipv4(), ec2.Port.tcp(22), "Allow SSH")
 
-        # Find latest Ubuntu 22.04 LTS AMI
-        ubuntu_ami = ec2.MachineImage.lookup(
-            name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*",
-            owners=["099720109477"],  # Canonical
-            filters={"architecture": ["x86_64"]}
-        )
-
-        ami_id = ubuntu_ami.get_image(self).image_id
+        ami_id = ami_id_override.strip() if ami_id_override else ""
+        if not ami_id:
+            # Default path: use Canonical Ubuntu image unless a deploy override is provided.
+            ubuntu_ami = ec2.MachineImage.lookup(
+                name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*",
+                owners=["099720109477"],  # Canonical
+                filters={"architecture": ["x86_64"]}
+            )
+            ami_id = ubuntu_ami.get_image(self).image_id
 
         # User data script to install required tools and set up VNC
         filenames = [

@@ -2,6 +2,7 @@ import unittest
 
 import aws_cdk as core
 import aws_cdk.assertions as assertions
+from aws_cdk.assertions import Match
 
 from gastown_workstation.gastown_workstation_stack import (
     GastownWorkstationStack,
@@ -65,6 +66,28 @@ class GastownWorkstationStackTests(unittest.TestCase):
             "availability_zone_index must be greater than or equal to 0",
         ):
             resolve_subnet_availability_zone(-1)
+
+    def test_stack_uses_ami_override_when_context_provided(self) -> None:
+        """Expected: Spot Fleet launch spec uses explicit deploy-time AMI override."""
+        app = core.App()
+        stack = GastownWorkstationStack(
+            app,
+            "aws-workstation-ami-override",
+            ami_id_override="ami-override123",
+            env=self._test_env(),
+        )
+        template = assertions.Template.from_stack(stack)
+
+        template.has_resource_properties(
+            "AWS::EC2::SpotFleet",
+            {
+                "SpotFleetRequestConfigData": {
+                    "LaunchSpecifications": Match.array_with(
+                        [Match.object_like({"ImageId": "ami-override123"})]
+                    )
+                }
+            },
+        )
 
 
 if __name__ == "__main__":

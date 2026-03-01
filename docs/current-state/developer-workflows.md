@@ -19,6 +19,9 @@ From [`Makefile`](../../Makefile):
 - `make gastown`: deploy/start workstation infrastructure (`ACTION=START`).
 - `make gastown ACTION=STOP`: destroy stack and stop workstation resources.
 - `make test`: run unit tests in `aws/gastown/tests/unit`.
+- `AMI_LOAD=<tag> make gastown`: deploy from exact AMI name `gastown_<tag>`.
+- `AMI_LIST=1 make gastown`: list environment AMIs (`gastown_*`) without deploy.
+- `AMI_LIST=1 AMI_PICK=1 make gastown`: list, select, and deploy from chosen AMI.
 
 ## CDK App Workflows
 
@@ -31,7 +34,7 @@ From [`aws/gastown/README.md`](../../aws/gastown/README.md):
 
 After deployment:
 
-1. Run helper script (typically via `make gastown` output flow):
+1. Run helper script (invoked automatically by `make gastown` deploy flow):
    - [`aws/scripts/check_instance.py`](../../aws/scripts/check_instance.py)
 2. Use printed SSH config snippet.
 3. Connect with `ssh gastown-workstation` once SSH config is updated.
