@@ -42,6 +42,24 @@ Defined in [`aws/gastown/gastown_workstation/gastown_workstation_stack.py`](../.
 - Post-deploy instance lookup + SSH snippet:
   - [`aws/scripts/check_instance.py`](../../aws/scripts/check_instance.py)
 
+## AMI Override Path And Rollback Notes
+
+- Default behavior: stack uses Canonical Ubuntu AMI lookup when no explicit `ami_id` context is provided.
+- Override behavior: deploy helper resolves or selects an AMI ID from environment-scoped AMIs, then passes `-c ami_id=<id>` to CDK deploy.
+- List-only behavior: `AMI_LIST=1` prints available AMIs and exits before deploy.
+- Guardrails:
+  - `AMI_PICK=1` requires `AMI_LIST=1`
+  - `AMI_LOAD` cannot be combined with `AMI_LIST`
+
+Rollback (disable AMI lifecycle options):
+
+- Ensure no AMI option env vars are active:
+  - `unset AMI_LOAD AMI_LIST AMI_PICK`
+- Run normal deploy entrypoint:
+  - `make gastown`
+- If rollback is needed in CI/automation, remove injected `AMI_*` variables from job/env configuration.
+- Post-rollback expectation: no `ami_id` context is passed and stack returns to default Ubuntu AMI resolution.
+
 ## IAM And Security Artifacts
 
 - Deployer policy template: [`aws/iam/gastown/deployer-policy.json`](../../aws/iam/gastown/deployer-policy.json)

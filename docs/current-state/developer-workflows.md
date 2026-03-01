@@ -23,6 +23,26 @@ From [`Makefile`](../../Makefile):
 - `AMI_LIST=1 make gastown`: list environment AMIs (`gastown_*`) without deploy.
 - `AMI_LIST=1 AMI_PICK=1 make gastown`: list, select, and deploy from chosen AMI.
 
+## AMI Option Behavior And Rollback
+
+Operational behavior (implemented in [`aws/scripts/deploy_workstation.py`](../../aws/scripts/deploy_workstation.py)):
+
+- `AMI_LOAD=<tag>` resolves `<environment>_<tag>` and deploys with the matched AMI ID.
+- `AMI_LIST=1` prints matching AMIs and exits without deploying.
+- `AMI_LIST=1 AMI_PICK=1` prints AMIs, prompts for selection, then deploys with the selected AMI ID.
+- `AMI_PICK=1` without `AMI_LIST=1` fails fast.
+- `AMI_LOAD` and `AMI_LIST` together fail fast.
+
+Rollback guidance for disabling AMI options and returning to default base-image deploy behavior:
+
+- For one command, run plain deploy with no AMI variables:
+  - `make gastown`
+- If AMI variables are exported in your shell, clear them first:
+  - `unset AMI_LOAD AMI_LIST AMI_PICK`
+- If automation sets AMI variables, remove them (or set `AMI_LIST=0` / `AMI_PICK=0`) and run standard deploy:
+  - `make gastown`
+- Expected rollback result: deploy proceeds without AMI override context and uses the default Ubuntu image path.
+
 ## CDK App Workflows
 
 From [`aws/gastown/README.md`](../../aws/gastown/README.md):
