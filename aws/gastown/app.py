@@ -139,20 +139,56 @@ def get_account(
     )
 
 
+def parse_optional_bool_context(value: object, context_key: str) -> bool:
+    """Parse a CDK context value into a boolean.
+
+    Args:
+        value: Raw context value from CDK.
+        context_key: Context key name for error messaging.
+
+    Returns:
+        Parsed boolean value.
+
+    Raises:
+        RuntimeError: If the value is not a supported boolean representation.
+    """
+    if isinstance(value, bool):
+        return value
+
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+
+    raise RuntimeError(
+        f"Invalid boolean context value for '{context_key}': {value!r}. "
+        "Use one of: true/false, 1/0, yes/no, on/off."
+    )
+
+
 def main() -> None:
     """Synthesize the CDK app for this environment."""
     app = cdk.App()
     ami_id_context = app.node.try_get_context("ami_id")
+    bootstrap_on_restored_context = app.node.try_get_context("bootstrap_on_restored_ami")
     ami_id_override = None
     if ami_id_context is not None:
         ami_id_value = str(ami_id_context).strip()
         if ami_id_value:
             ami_id_override = ami_id_value
+    bootstrap_on_restored_ami = False
+    if bootstrap_on_restored_context is not None:
+        bootstrap_on_restored_ami = parse_optional_bool_context(
+            value=bootstrap_on_restored_context,
+            context_key="bootstrap_on_restored_ami",
+        )
 
     GastownWorkstationStack(
         app,
         "GastownWorkstationStack",
         ami_id_override=ami_id_override,
+        bootstrap_on_restored_ami=bootstrap_on_restored_ami,
         env=cdk.Environment(account=get_account(), region=get_region()),
     )
     app.synth()

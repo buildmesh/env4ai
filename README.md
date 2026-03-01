@@ -59,6 +59,9 @@ Optional deploy-time AMI controls are available through environment variables:
 # Deploy using an exact AMI name: gastown_20260301
 AMI_LOAD=20260301 make gastown
 
+# Deploy from saved AMI and force bootstrap scripts to run again
+AMI_LOAD=20260301 AMI_BOOTSTRAP=1 make gastown
+
 # List AMIs matching gastown_* and exit without deploy
 AMI_LIST=1 make gastown
 
@@ -68,6 +71,7 @@ AMI_LIST=1 AMI_PICK=1 make gastown
 
 Behavior:
 - `AMI_LOAD=<tag>` resolves AMI name `<environment>_<tag>` exactly and deploys with that AMI ID.
+- `AMI_BOOTSTRAP=1` runs bootstrap userData even when deploying from a saved AMI (default is skip for restored AMIs).
 - If requested AMI is missing, deploy fails before Spot request creation.
 - `AMI_LIST=1` shows environment-scoped AMIs with ID/state/creation date for operator choice.
 - Without AMI options, deploy behavior remains unchanged and uses the default Ubuntu base image.

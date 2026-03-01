@@ -27,6 +27,29 @@ def resolve_subnet_availability_zone(availability_zone_index: int = 0) -> str:
     return Fn.select(availability_zone_index, Fn.get_azs())
 
 
+def build_bootstrap_user_data() -> str:
+    """Return base64-encoded bootstrap user data for fresh Ubuntu launches.
+
+    Returns:
+        Base64-encoded concatenation of init scripts.
+    """
+    filenames = [
+        "deps.sh",
+        "python.sh",
+        "docker.sh",
+        "android.sh",
+        "agents.sh",
+        "gastown.sh",
+    ]
+
+    user_data_script = ""
+    for filename in filenames:
+        with open(f"init/{filename}", "r", encoding="utf-8") as fd:
+            user_data_script += fd.read()
+
+    return base64.b64encode(user_data_script.encode("utf-8")).decode("utf-8")
+
+
 class GastownWorkstationStack(Stack):
 
     def __init__(
@@ -35,6 +58,7 @@ class GastownWorkstationStack(Stack):
         construct_id: str,
         availability_zone_index: int = 0,
         ami_id_override: str | None = None,
+        bootstrap_on_restored_ami: bool = False,
         **kwargs,
     ) -> None:
         """Create the workstation infrastructure stack.
@@ -44,6 +68,8 @@ class GastownWorkstationStack(Stack):
             construct_id: Logical construct id.
             availability_zone_index: Selected AZ index for workstation subnet.
             ami_id_override: Optional explicit AMI ID used for deploy-time restore flows.
+            bootstrap_on_restored_ami: When ``True``, include bootstrap user data even
+                when launching from ``ami_id_override``.
             **kwargs: Additional ``Stack`` keyword args.
         """
         super().__init__(scope, construct_id, **kwargs)
@@ -83,22 +109,28 @@ class GastownWorkstationStack(Stack):
             )
             ami_id = ubuntu_ami.get_image(self).image_id
 
-        # User data script to install required tools and set up VNC
-        filenames = [
-            "deps.sh",
-            "python.sh",
-            "docker.sh",
-            "android.sh",
-            "agents.sh",
-            "gastown.sh"
-        ]
-
-        user_data_script = ""
-        for filename in filenames:
-            with open(f"init/{filename}", "r") as fd:
-                user_data_script += fd.read()
-
-        user_data_base64 = base64.b64encode(user_data_script.encode("utf-8")).decode("utf-8")
+        # Reason: restored AMIs already contain bootstrapped state by design.
+        use_bootstrap = not ami_id_override or bootstrap_on_restored_ami
+        launch_specification: dict[str, object] = {
+            "image_id": ami_id,
+            "instance_type": "t3.xlarge",
+            "key_name": "aws_key",
+            "security_groups": [{"groupId": sg.security_group_id}],
+            "subnet_id": local_zone_subnet.ref,
+            "block_device_mappings": [
+                {
+                    "deviceName": "/dev/sda1",  # Typical root device for Ubuntu AMIs
+                    "ebs": {
+                        "deleteOnTermination": True,
+                        "volumeSize": 16,        # Request 24 GB
+                        "volumeType": "gp3",     # Use gp3 for best price/performance
+                        "encrypted": False       # Set to True if encryption is required
+                    }
+                }
+            ],
+        }
+        if use_bootstrap:
+            launch_specification["user_data"] = build_bootstrap_user_data()
 
         # Spot Fleet Request
         ec2.CfnSpotFleet(self, "GastownSpotFleet",
@@ -107,25 +139,7 @@ class GastownWorkstationStack(Stack):
                 target_capacity=1,
                 spot_price="0.1",
                 launch_specifications=[
-                    ec2.CfnSpotFleet.SpotFleetLaunchSpecificationProperty(
-                        image_id=ami_id,
-                        instance_type="t3.xlarge",
-                        key_name="aws_key",
-                        security_groups=[{"groupId": sg.security_group_id}],
-                        subnet_id=local_zone_subnet.ref,
-                        user_data=user_data_base64,
-                        block_device_mappings=[
-                            {
-                                "deviceName": "/dev/sda1",  # Typical root device for Ubuntu AMIs
-                                "ebs": {
-                                    "deleteOnTermination": True,
-                                    "volumeSize": 16,        # Request 24 GB
-                                    "volumeType": "gp3",     # Use gp3 for best price/performance
-                                    "encrypted": False       # Set to True if encryption is required
-                                }
-                            }
-                        ]
-                    )
+                    ec2.CfnSpotFleet.SpotFleetLaunchSpecificationProperty(**launch_specification)
                 ]
             )
         )

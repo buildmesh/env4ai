@@ -2,11 +2,12 @@ import io
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 
 from deploy_workstation import (  # noqa: E402
+    deploy_stack,
     list_environment_images,
     pick_image_interactively,
     resolve_exact_image_id,
@@ -98,6 +99,33 @@ class DeployWorkstationScriptTests(unittest.TestCase):
         """Failure: AMI_PICK requires AMI_LIST to avoid ambiguous behavior."""
         with self.assertRaisesRegex(RuntimeError, "AMI_PICK requires AMI_LIST=1."):
             validate_mode_arguments(ami_load_tag="", ami_list=False, ami_pick=True)
+
+    def test_deploy_stack_passes_restored_bootstrap_context_when_enabled(self) -> None:
+        """Expected: restored AMI deploy can opt-in bootstrap via CDK context."""
+        with patch("deploy_workstation.run_command") as run_command:
+            deploy_stack(
+                stack_dir="/tmp/stack",
+                ami_id="ami-1234",
+                bootstrap_on_restored_ami=True,
+            )
+
+        args = run_command.call_args.args[0]
+        self.assertIn("-c", args)
+        self.assertIn("ami_id=ami-1234", args)
+        self.assertIn("bootstrap_on_restored_ami=true", args)
+
+    def test_deploy_stack_omits_ami_context_without_ami_id(self) -> None:
+        """Edge: default deploy path keeps command free of AMI contexts."""
+        with patch("deploy_workstation.run_command") as run_command:
+            deploy_stack(
+                stack_dir="/tmp/stack",
+                ami_id=None,
+                bootstrap_on_restored_ami=True,
+            )
+
+        args = run_command.call_args.args[0]
+        self.assertNotIn("ami_id=ami-1234", args)
+        self.assertNotIn("bootstrap_on_restored_ami=true", args)
 
 
 if __name__ == "__main__":
