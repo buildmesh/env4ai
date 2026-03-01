@@ -4,6 +4,14 @@ ACTION := START
 
 aws:
 	docker compose run --rm aws /bin/bash
+builder:
+ifeq ($(ACTION),START)
+	docker compose run --rm aws bash -lc "cd builder && uv run cdk deploy --require-approval never && uv run ../scripts/check_instance.py"
+else ifeq ($(ACTION),STOP)
+	docker compose run --rm aws bash -lc "cd builder && uv run cdk destroy --force"
+else
+	@echo "Invalid ACTION=$(ACTION)"
+endif
 gastown:
 ifeq ($(ACTION),START)
 	docker compose run --rm aws bash -lc "cd gastown && uv run cdk deploy --require-approval never && uv run ../scripts/check_instance.py"

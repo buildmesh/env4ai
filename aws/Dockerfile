@@ -30,3 +30,4 @@ USER user
 
 COPY --chown=user:user . .
 RUN cd gastown && uv sync --frozen
+RUN cd builder && uv sync --frozen
