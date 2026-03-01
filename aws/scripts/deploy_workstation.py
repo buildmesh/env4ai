@@ -210,11 +210,17 @@ def run_command(command: Sequence[str], cwd: str) -> None:
     subprocess.run(command, check=True, cwd=cwd)
 
 
-def deploy_stack(stack_dir: str, ami_id: str | None) -> None:
-    """Deploy CDK stack, optionally passing an AMI override context."""
+def deploy_stack(
+    stack_dir: str,
+    ami_id: str | None,
+    bootstrap_on_restored_ami: bool,
+) -> None:
+    """Deploy CDK stack with optional AMI and restored-AMI bootstrap context."""
     command: list[str] = ["uv", "run", "cdk", "deploy", "--require-approval", "never"]
     if ami_id:
         command.extend(["-c", f"ami_id={ami_id}"])
+        if bootstrap_on_restored_ami:
+            command.extend(["-c", "bootstrap_on_restored_ami=true"])
     run_command(command, cwd=stack_dir)
 
 
@@ -232,6 +238,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     ami_load_tag = os.environ.get("AMI_LOAD", "").strip()
     ami_list = is_truthy(os.environ.get("AMI_LIST"))
     ami_pick = is_truthy(os.environ.get("AMI_PICK"))
+    ami_bootstrap = is_truthy(os.environ.get("AMI_BOOTSTRAP"))
 
     validate_mode_arguments(
         ami_load_tag=ami_load_tag,
@@ -263,7 +270,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"({selected_image['image_id']}) for deploy."
         )
 
-    deploy_stack(stack_dir=args.stack_dir, ami_id=selected_ami_id)
+    deploy_stack(
+        stack_dir=args.stack_dir,
+        ami_id=selected_ami_id,
+        bootstrap_on_restored_ami=ami_bootstrap,
+    )
     run_post_deploy_check(stack_dir=args.stack_dir, stack_name=args.stack_name)
     return 0
 

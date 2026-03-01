@@ -89,6 +89,53 @@ class GastownWorkstationStackTests(unittest.TestCase):
             },
         )
 
+    def test_default_ami_path_includes_bootstrap_userdata(self) -> None:
+        """Expected: default Ubuntu path includes full bootstrap user data."""
+        app = core.App()
+        stack = GastownWorkstationStack(
+            app, "aws-workstation-default-bootstrap", env=self._test_env()
+        )
+        template_dict = assertions.Template.from_stack(stack).to_json()
+        launch_spec = template_dict["Resources"]["GastownSpotFleet"]["Properties"][
+            "SpotFleetRequestConfigData"
+        ]["LaunchSpecifications"][0]
+
+        self.assertIn("UserData", launch_spec)
+        self.assertTrue(str(launch_spec["UserData"]).strip())
+
+    def test_restored_ami_path_skips_bootstrap_userdata_by_default(self) -> None:
+        """Edge: restored-AMI deploy omits bootstrap user data unless explicitly requested."""
+        app = core.App()
+        stack = GastownWorkstationStack(
+            app,
+            "aws-workstation-restored-no-bootstrap",
+            ami_id_override="ami-restored001",
+            env=self._test_env(),
+        )
+        template_dict = assertions.Template.from_stack(stack).to_json()
+        launch_spec = template_dict["Resources"]["GastownSpotFleet"]["Properties"][
+            "SpotFleetRequestConfigData"
+        ]["LaunchSpecifications"][0]
+
+        self.assertNotIn("UserData", launch_spec)
+
+    def test_restored_ami_path_allows_explicit_bootstrap_override(self) -> None:
+        """Expected: restored-AMI deploy can opt-in to bootstrap user data."""
+        app = core.App()
+        stack = GastownWorkstationStack(
+            app,
+            "aws-workstation-restored-with-bootstrap",
+            ami_id_override="ami-restored002",
+            bootstrap_on_restored_ami=True,
+            env=self._test_env(),
+        )
+        template_dict = assertions.Template.from_stack(stack).to_json()
+        launch_spec = template_dict["Resources"]["GastownSpotFleet"]["Properties"][
+            "SpotFleetRequestConfigData"
+        ]["LaunchSpecifications"][0]
+
+        self.assertIn("UserData", launch_spec)
+
 
 if __name__ == "__main__":
     unittest.main()
