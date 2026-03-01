@@ -74,6 +74,8 @@ Behavior:
 - `AMI_BOOTSTRAP=1` runs bootstrap userData even when deploying from a saved AMI (default is skip for restored AMIs).
 - If requested AMI is missing, deploy fails before Spot request creation.
 - `AMI_LIST=1` shows environment-scoped AMIs with ID/state/creation date for operator choice.
+- `AMI_PICK=1` is valid only with `AMI_LIST=1` and prompts for numbered AMI selection.
+- `AMI_LOAD` and `AMI_LIST` are mutually exclusive.
 - Without AMI options, deploy behavior remains unchanged and uses the default Ubuntu base image.
 
 ### Stop/destroy `gastown` environment
@@ -83,6 +85,10 @@ make gastown ACTION=STOP
 ```
 
 This destroys the deployed stack and stops billing for the workstation resources.
+
+Save-on-stop note:
+- Current `ACTION=STOP` flow does not accept an AMI save variable in this repository state.
+- To preserve instance state as an AMI, create the image manually before stop, then deploy later with `AMI_LOAD=<tag>`.
 
 ### Enter the tooling container
 
