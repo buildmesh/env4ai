@@ -1,5 +1,6 @@
 import io
 from pathlib import Path
+import subprocess
 import sys
 import unittest
 from unittest.mock import Mock, patch
@@ -7,10 +8,12 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 
 from deploy_workstation import (  # noqa: E402
+    build_ami_lookup_error_message,
     deploy_stack,
     list_environment_images,
     pick_image_interactively,
     resolve_exact_image_id,
+    run_command,
     validate_mode_arguments,
 )
 
@@ -126,6 +129,48 @@ class DeployWorkstationScriptTests(unittest.TestCase):
         args = run_command.call_args.args[0]
         self.assertNotIn("ami_id=ami-1234", args)
         self.assertNotIn("bootstrap_on_restored_ami=true", args)
+
+    def test_build_ami_lookup_error_message_is_actionable(self) -> None:
+        """Expected: AMI lookup failures provide next-step guidance."""
+        message = build_ami_lookup_error_message("list AMIs for 'gastown'")
+
+        self.assertIn("Unable to list AMIs for 'gastown'", message)
+        self.assertIn("ec2:DescribeImages", message)
+
+    def test_list_environment_images_raises_actionable_error_on_describe_failure(self) -> None:
+        """Failure: EC2 describe errors in list mode are standardized for users."""
+        ec2_client = Mock()
+        ec2_client.describe_images.side_effect = Exception("boom")
+
+        with self.assertRaisesRegex(RuntimeError, "Unable to list AMIs for 'gastown'"):
+            list_environment_images(ec2_client, environment="gastown")
+
+    def test_resolve_exact_image_id_raises_actionable_error_on_describe_failure(self) -> None:
+        """Failure: EC2 describe errors in load mode are standardized for users."""
+        ec2_client = Mock()
+        ec2_client.describe_images.side_effect = Exception("boom")
+
+        with self.assertRaisesRegex(RuntimeError, "Unable to load AMI 'gastown_release-a'"):
+            resolve_exact_image_id(ec2_client, expected_name="gastown_release-a")
+
+    @patch("deploy_workstation.subprocess.run")
+    def test_run_command_raises_on_timeout(self, run_mock: Mock) -> None:
+        """Failure: command timeout returns a consistent wait/triage error."""
+        run_mock.side_effect = subprocess.TimeoutExpired(cmd=["uv", "run"], timeout=5)
+
+        with self.assertRaisesRegex(RuntimeError, "Timed out while waiting"):
+            run_command(["uv", "run"], cwd=".", timeout_seconds=5)
+
+    @patch("deploy_workstation.subprocess.run")
+    def test_run_command_raises_on_non_zero_exit(self, run_mock: Mock) -> None:
+        """Edge: command failure includes command and exit code context."""
+        run_mock.side_effect = subprocess.CalledProcessError(
+            returncode=2,
+            cmd=["uv", "run", "cdk", "deploy"],
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "Command failed \\(exit code 2\\)"):
+            run_command(["uv", "run", "cdk", "deploy"], cwd=".")
 
 
 if __name__ == "__main__":

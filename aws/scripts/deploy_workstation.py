@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import subprocess
 import sys
@@ -11,6 +12,18 @@ from typing import Callable, Sequence, TextIO
 
 import boto3
 from botocore.client import BaseClient
+
+LOGGER = logging.getLogger(__name__)
+DEPLOY_COMMAND_TIMEOUT_SECONDS = 45 * 60
+POST_DEPLOY_CHECK_TIMEOUT_SECONDS = 5 * 60
+
+
+def build_ami_lookup_error_message(scope: str) -> str:
+    """Return a consistent user-facing AMI lookup failure message."""
+    return (
+        f"Unable to {scope} because AMI lookup failed. "
+        "Verify AWS credentials, region, and ec2:DescribeImages permission."
+    )
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -103,10 +116,18 @@ def list_environment_images(ec2_client: BaseClient, environment: str) -> list[di
         Sorted AMI records (newest first).
     """
     pattern = f"{environment}_*"
-    response = ec2_client.describe_images(
-        Owners=["self"],
-        Filters=[{"Name": "name", "Values": [pattern]}],
-    )
+    try:
+        response = ec2_client.describe_images(
+            Owners=["self"],
+            Filters=[{"Name": "name", "Values": [pattern]}],
+        )
+    except Exception as err:
+        LOGGER.exception(
+            "AMI list describe_images failed for environment=%s pattern=%s",
+            environment,
+            pattern,
+        )
+        raise RuntimeError(build_ami_lookup_error_message(f"list AMIs for '{environment}'")) from err
     images = response.get("Images", [])
     normalized: list[dict[str, str]] = []
     for image in images:
@@ -136,10 +157,17 @@ def resolve_exact_image_id(ec2_client: BaseClient, expected_name: str) -> str:
     Raises:
         RuntimeError: If no exact match exists.
     """
-    response = ec2_client.describe_images(
-        Owners=["self"],
-        Filters=[{"Name": "name", "Values": [expected_name]}],
-    )
+    try:
+        response = ec2_client.describe_images(
+            Owners=["self"],
+            Filters=[{"Name": "name", "Values": [expected_name]}],
+        )
+    except Exception as err:
+        LOGGER.exception(
+            "AMI load describe_images failed for expected_name=%s",
+            expected_name,
+        )
+        raise RuntimeError(build_ami_lookup_error_message(f"load AMI '{expected_name}'")) from err
     candidates = response.get("Images", [])
     exact_matches = [
         image
@@ -205,9 +233,31 @@ def pick_image_interactively(
         return images[index - 1]
 
 
-def run_command(command: Sequence[str], cwd: str) -> None:
-    """Run a subprocess command and fail on non-zero exit."""
-    subprocess.run(command, check=True, cwd=cwd)
+def run_command(command: Sequence[str], cwd: str, timeout_seconds: int | None = None) -> None:
+    """Run a subprocess command and fail with a consistent actionable error."""
+    try:
+        subprocess.run(command, check=True, cwd=cwd, timeout=timeout_seconds)
+    except subprocess.TimeoutExpired as err:
+        LOGGER.error(
+            "Command timeout while waiting for completion command=%s cwd=%s timeout_seconds=%s",
+            " ".join(command),
+            cwd,
+            timeout_seconds,
+        )
+        raise RuntimeError(
+            "Timed out while waiting for an AWS/CDK operation to finish. "
+            "Check CloudFormation events and rerun when the stack is stable."
+        ) from err
+    except subprocess.CalledProcessError as err:
+        LOGGER.error(
+            "Command failed command=%s cwd=%s exit_code=%s",
+            " ".join(command),
+            cwd,
+            err.returncode,
+        )
+        raise RuntimeError(
+            f"Command failed (exit code {err.returncode}): {' '.join(command)}"
+        ) from err
 
 
 def deploy_stack(
@@ -221,7 +271,11 @@ def deploy_stack(
         command.extend(["-c", f"ami_id={ami_id}"])
         if bootstrap_on_restored_ami:
             command.extend(["-c", "bootstrap_on_restored_ami=true"])
-    run_command(command, cwd=stack_dir)
+    run_command(
+        command,
+        cwd=stack_dir,
+        timeout_seconds=DEPLOY_COMMAND_TIMEOUT_SECONDS,
+    )
 
 
 def run_post_deploy_check(stack_dir: str, stack_name: str) -> None:
@@ -229,6 +283,7 @@ def run_post_deploy_check(stack_dir: str, stack_name: str) -> None:
     run_command(
         ["uv", "run", "../scripts/check_instance.py", "--stack-name", stack_name],
         cwd=stack_dir,
+        timeout_seconds=POST_DEPLOY_CHECK_TIMEOUT_SECONDS,
     )
 
 
@@ -282,9 +337,6 @@ def main(argv: Sequence[str] | None = None) -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except subprocess.CalledProcessError as err:
-        print(f"Command failed with exit code {err.returncode}: {' '.join(err.cmd)}", file=sys.stderr)
-        raise SystemExit(err.returncode)
     except RuntimeError as err:
         print(str(err), file=sys.stderr)
         raise SystemExit(1)
