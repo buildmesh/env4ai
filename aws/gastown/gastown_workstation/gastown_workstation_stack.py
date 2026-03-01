@@ -153,12 +153,19 @@ class GastownWorkstationStack(Stack):
         else:
             effective_ami_source = ami_source
             if (
-                effective_ami_source == "selected"
-                and (not effective_selected_ami_id or not effective_selected_ami_id.strip())
                 and ami_id_override
                 and ami_id_override.strip()
             ):
-                effective_selected_ami_id = ami_id_override.strip()
+                override_ami_id = ami_id_override.strip()
+                if effective_ami_source == "selected":
+                    if (
+                        effective_selected_ami_id
+                        and effective_selected_ami_id.strip()
+                        and effective_selected_ami_id.strip() != override_ami_id
+                    ):
+                        raise ValueError("ami_id_override conflicts with selected_ami_id")
+                    if not effective_selected_ami_id or not effective_selected_ami_id.strip():
+                        effective_selected_ami_id = override_ami_id
 
         ami_id = resolve_ami_id(
             stack=self,
