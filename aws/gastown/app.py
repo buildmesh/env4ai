@@ -142,9 +142,17 @@ def get_account(
 def main() -> None:
     """Synthesize the CDK app for this environment."""
     app = cdk.App()
+    ami_id_context = app.node.try_get_context("ami_id")
+    ami_id_override = None
+    if ami_id_context is not None:
+        ami_id_value = str(ami_id_context).strip()
+        if ami_id_value:
+            ami_id_override = ami_id_value
+
     GastownWorkstationStack(
         app,
         "GastownWorkstationStack",
+        ami_id_override=ami_id_override,
         env=cdk.Environment(account=get_account(), region=get_region()),
     )
     app.synth()

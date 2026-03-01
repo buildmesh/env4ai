@@ -53,6 +53,25 @@ ssh gastown-workstation
 
 Note: AWS creates `aws-ec2-spot-fleet-tagging-role` automatically the first time Spot Fleet needs it.
 
+Optional deploy-time AMI controls are available through environment variables:
+
+```bash
+# Deploy using an exact AMI name: gastown_20260301
+AMI_LOAD=20260301 make gastown
+
+# List AMIs matching gastown_* and exit without deploy
+AMI_LIST=1 make gastown
+
+# List AMIs and choose one interactively, then deploy
+AMI_LIST=1 AMI_PICK=1 make gastown
+```
+
+Behavior:
+- `AMI_LOAD=<tag>` resolves AMI name `<environment>_<tag>` exactly and deploys with that AMI ID.
+- If requested AMI is missing, deploy fails before Spot request creation.
+- `AMI_LIST=1` shows environment-scoped AMIs with ID/state/creation date for operator choice.
+- Without AMI options, deploy behavior remains unchanged and uses the default Ubuntu base image.
+
 ### Stop/destroy `gastown` environment
 
 ```bash

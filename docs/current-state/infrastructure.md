@@ -20,6 +20,7 @@ Defined in [`aws/gastown/gastown_workstation/gastown_workstation_stack.py`](../.
 - Internet gateway + route table + public subnet route
 - Security group allowing inbound SSH (`tcp/22`) from `0.0.0.0/0`
 - Ubuntu 22.04 AMI lookup (Canonical owner)
+  - Deploy-time override supported through CDK context key `ami_id`
 - Spot Fleet request with one `t3.xlarge` instance target
 - Base64-encoded user data composed from `aws/gastown/init/*.sh`
 - EBS root volume settings in launch specification
@@ -36,6 +37,7 @@ Defined in [`aws/gastown/gastown_workstation/gastown_workstation_stack.py`](../.
 ## Operational Entry Points
 
 - Deploy/start: `make gastown` (`ACTION=START` default) via [`Makefile`](../../Makefile)
+  - AMI controls: `AMI_LOAD`, `AMI_LIST`, `AMI_PICK` via [`aws/scripts/deploy_workstation.py`](../../aws/scripts/deploy_workstation.py)
 - Destroy/stop: `make gastown ACTION=STOP`
 - Post-deploy instance lookup + SSH snippet:
   - [`aws/scripts/check_instance.py`](../../aws/scripts/check_instance.py)
