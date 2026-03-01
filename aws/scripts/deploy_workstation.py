@@ -12,6 +12,42 @@ from typing import Callable, Sequence, TextIO
 
 import boto3
 from botocore.client import BaseClient
+from botocore.exceptions import ClientError
+
+REQUIRED_AMI_READ_PERMISSIONS: tuple[str, ...] = ("ec2:DescribeImages",)
+
+
+def _is_access_denied_error(error_code: str) -> bool:
+    """Return whether an AWS error code indicates missing IAM permissions."""
+    normalized = error_code.strip()
+    return normalized in {
+        "AccessDenied",
+        "AccessDeniedException",
+        "UnauthorizedOperation",
+        "UnauthorizedException",
+    }
+
+
+def _raise_permission_preflight_error(action: str, error: ClientError) -> None:
+    """Raise an actionable permission error for AMI read preflight failures.
+
+    Args:
+        action: Human-readable action that failed.
+        error: Original AWS client error.
+
+    Raises:
+        RuntimeError: Always raised with remediation guidance.
+    """
+    error_code = str(error.response.get("Error", {}).get("Code", "Unknown"))
+    if not _is_access_denied_error(error_code):
+        raise RuntimeError(f"EC2 API call failed during {action}: {error}") from error
+
+    permission_list = ", ".join(REQUIRED_AMI_READ_PERMISSIONS)
+    raise RuntimeError(
+        f"IAM preflight failed for {action}. Missing required EC2 image permission(s): "
+        f"{permission_list}. "
+        "Grant these actions to the deploy identity and retry."
+    ) from error
 
 LOGGER = logging.getLogger(__name__)
 DEPLOY_COMMAND_TIMEOUT_SECONDS = 45 * 60
@@ -122,6 +158,8 @@ def list_environment_images(ec2_client: BaseClient, environment: str) -> list[di
             Filters=[{"Name": "name", "Values": [pattern]}],
         )
     except Exception as err:
+        if isinstance(err, ClientError):
+            _raise_permission_preflight_error("AMI list mode", err)
         LOGGER.exception(
             "AMI list describe_images failed for environment=%s pattern=%s",
             environment,
@@ -163,6 +201,8 @@ def resolve_exact_image_id(ec2_client: BaseClient, expected_name: str) -> str:
             Filters=[{"Name": "name", "Values": [expected_name]}],
         )
     except Exception as err:
+        if isinstance(err, ClientError):
+            _raise_permission_preflight_error("AMI exact-name lookup", err)
         LOGGER.exception(
             "AMI load describe_images failed for expected_name=%s",
             expected_name,
@@ -260,6 +300,25 @@ def run_command(command: Sequence[str], cwd: str, timeout_seconds: int | None = 
         ) from err
 
 
+def run_ami_permission_preflight(ec2_client: BaseClient, environment: str) -> None:
+    """Verify required AMI-read IAM permissions before deploy mutation actions.
+
+    Args:
+        ec2_client: Boto3 EC2 client.
+        environment: Environment name used for AMI name prefix filters.
+
+    Raises:
+        RuntimeError: If preflight fails due to missing permissions or API errors.
+    """
+    try:
+        ec2_client.describe_images(
+            Owners=["self"],
+            Filters=[{"Name": "name", "Values": [f"{environment}_*"]}],
+        )
+    except ClientError as error:
+        _raise_permission_preflight_error("AMI IAM preflight", error)
+
+
 def deploy_stack(
     stack_dir: str,
     ami_id: str | None,
@@ -308,6 +367,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         region = os.environ.get("AWS_DEFAULT_REGION")
 
     ec2_client = make_ec2_client(profile=profile, region=region)
+    should_check_ami_permissions = bool(ami_load_tag or ami_list)
+    if should_check_ami_permissions:
+        run_ami_permission_preflight(ec2_client, environment=args.environment)
 
     if ami_load_tag:
         expected_name = f"{args.environment}_{ami_load_tag}"

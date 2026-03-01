@@ -5,6 +5,8 @@ import sys
 import unittest
 from unittest.mock import Mock, patch
 
+from botocore.exceptions import ClientError
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 
 from deploy_workstation import (  # noqa: E402
@@ -15,6 +17,7 @@ from deploy_workstation import (  # noqa: E402
     pick_image_interactively,
     resolve_exact_image_id,
     run_command,
+    run_ami_permission_preflight,
     validate_mode_arguments,
 )
 
@@ -328,6 +331,43 @@ class DeployWorkstationScriptTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "Command failed \\(exit code 2\\)"):
             run_command(["uv", "run", "cdk", "deploy"], cwd=".")
+
+    def test_run_ami_permission_preflight_succeeds_for_describe_images(self) -> None:
+        """Expected: preflight passes when describe_images permission is available."""
+        ec2_client = Mock()
+        ec2_client.describe_images.return_value = {"Images": []}
+
+        run_ami_permission_preflight(ec2_client, environment="gastown")
+
+        ec2_client.describe_images.assert_called_once_with(
+            Owners=["self"],
+            Filters=[{"Name": "name", "Values": ["gastown_*"]}],
+        )
+
+    def test_run_ami_permission_preflight_raises_generic_api_error(self) -> None:
+        """Edge: non-IAM EC2 API failures are surfaced with context."""
+        ec2_client = Mock()
+        ec2_client.describe_images.side_effect = ClientError(
+            error_response={"Error": {"Code": "RequestLimitExceeded", "Message": "Too many requests"}},
+            operation_name="DescribeImages",
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "EC2 API call failed during AMI IAM preflight"):
+            run_ami_permission_preflight(ec2_client, environment="gastown")
+
+    def test_run_ami_permission_preflight_reports_missing_permissions(self) -> None:
+        """Failure: IAM preflight prints required remediation for AccessDenied."""
+        ec2_client = Mock()
+        ec2_client.describe_images.side_effect = ClientError(
+            error_response={"Error": {"Code": "UnauthorizedOperation", "Message": "Denied"}},
+            operation_name="DescribeImages",
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "Missing required EC2 image permission\\(s\\): ec2:DescribeImages",
+        ):
+            run_ami_permission_preflight(ec2_client, environment="gastown")
 
 
 if __name__ == "__main__":
