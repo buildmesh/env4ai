@@ -6,6 +6,7 @@ from aws_cdk.assertions import Match
 
 from gastown_workstation.gastown_workstation_stack import (
     GastownWorkstationStack,
+    resolve_ami_id,
     resolve_subnet_availability_zone,
 )
 
@@ -88,6 +89,95 @@ class GastownWorkstationStackTests(unittest.TestCase):
                 }
             },
         )
+
+    def test_selected_ami_defaults_to_skipping_bootstrap_user_data(self) -> None:
+        """Expected: selected AMI path omits user data unless explicitly enabled."""
+        app = core.App()
+        stack = GastownWorkstationStack(
+            app,
+            "aws-workstation-selected-ami-no-bootstrap",
+            ami_source="selected",
+            selected_ami_id="ami-0123456789abcdef0",
+            env=self._test_env(),
+        )
+        template = assertions.Template.from_stack(stack)
+
+        template.has_resource_properties(
+            "AWS::EC2::SpotFleet",
+            {
+                "SpotFleetRequestConfigData": {
+                    "LaunchSpecifications": assertions.Match.array_with(
+                        [
+                            assertions.Match.object_like(
+                                {
+                                    "ImageId": "ami-0123456789abcdef0",
+                                    "UserData": assertions.Match.absent(),
+                                }
+                            )
+                        ]
+                    )
+                }
+            },
+        )
+
+    def test_selected_ami_allows_explicit_bootstrap_opt_in(self) -> None:
+        """Edge: selected AMI path can opt in to full bootstrap user data."""
+        app = core.App()
+        stack = GastownWorkstationStack(
+            app,
+            "aws-workstation-selected-ami-bootstrap-opt-in",
+            ami_source="selected",
+            selected_ami_id="ami-0123456789abcdef0",
+            bootstrap_on_restored_ami=True,
+            env=self._test_env(),
+        )
+        template = assertions.Template.from_stack(stack)
+
+        template.has_resource_properties(
+            "AWS::EC2::SpotFleet",
+            {
+                "SpotFleetRequestConfigData": {
+                    "LaunchSpecifications": assertions.Match.array_with(
+                        [
+                            assertions.Match.object_like(
+                                {
+                                    "ImageId": "ami-0123456789abcdef0",
+                                    "UserData": assertions.Match.any_value(),
+                                }
+                            )
+                        ]
+                    )
+                }
+            },
+        )
+
+    def test_selected_ami_requires_explicit_ami_id(self) -> None:
+        """Failure: selected source mode must provide a concrete AMI ID."""
+        app = core.App()
+        with self.assertRaisesRegex(
+            ValueError,
+            "selected_ami_id is required when ami_source is 'selected'",
+        ):
+            GastownWorkstationStack(
+                app,
+                "aws-workstation-selected-ami-missing-id",
+                ami_source="selected",
+                env=self._test_env(),
+            )
+
+    def test_resolve_ami_id_rejects_unknown_source(self) -> None:
+        """Failure: invalid AMI source values are rejected."""
+        app = core.App()
+        stack = core.Stack(app, "ami-id-resolver-stack", env=self._test_env())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "ami_source must be either 'default' or 'selected'",
+        ):
+            resolve_ami_id(
+                stack=stack,
+                ami_source="restored",  # type: ignore[arg-type]
+            )
 
     def test_default_ami_path_includes_bootstrap_userdata(self) -> None:
         """Expected: default Ubuntu path includes full bootstrap user data."""

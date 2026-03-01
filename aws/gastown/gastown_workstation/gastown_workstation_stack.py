@@ -7,6 +7,7 @@ from aws_cdk import (
 )
 from constructs import Construct
 import base64
+from typing import Literal
 
 
 def resolve_subnet_availability_zone(availability_zone_index: int = 0) -> str:
@@ -50,6 +51,42 @@ def build_bootstrap_user_data() -> str:
     return base64.b64encode(user_data_script.encode("utf-8")).decode("utf-8")
 
 
+def resolve_ami_id(
+    stack: Stack,
+    ami_source: Literal["default", "selected"] = "default",
+    selected_ami_id: str | None = None,
+) -> str:
+    """Resolve the AMI ID to use for the workstation launch.
+
+    Args:
+        stack: Parent stack used for AMI lookup context.
+        ami_source: AMI selection mode.
+        selected_ami_id: Explicit AMI ID for ``selected`` mode.
+
+    Returns:
+        AMI ID to use in the launch specification.
+
+    Raises:
+        ValueError: If AMI inputs are invalid.
+    """
+    if ami_source == "default":
+        ubuntu_ami = ec2.MachineImage.lookup(
+            name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*",
+            owners=["099720109477"],  # Canonical
+            filters={"architecture": ["x86_64"]},
+        )
+        return ubuntu_ami.get_image(stack).image_id
+
+    if ami_source == "selected":
+        if not selected_ami_id or not selected_ami_id.strip():
+            raise ValueError(
+                "selected_ami_id is required when ami_source is 'selected'"
+            )
+        return selected_ami_id.strip()
+
+    raise ValueError("ami_source must be either 'default' or 'selected'")
+
+
 class GastownWorkstationStack(Stack):
 
     def __init__(
@@ -58,6 +95,8 @@ class GastownWorkstationStack(Stack):
         construct_id: str,
         availability_zone_index: int = 0,
         ami_id_override: str | None = None,
+        ami_source: Literal["default", "selected"] | None = None,
+        selected_ami_id: str | None = None,
         bootstrap_on_restored_ami: bool = False,
         **kwargs,
     ) -> None:
@@ -68,8 +107,10 @@ class GastownWorkstationStack(Stack):
             construct_id: Logical construct id.
             availability_zone_index: Selected AZ index for workstation subnet.
             ami_id_override: Optional explicit AMI ID used for deploy-time restore flows.
-            bootstrap_on_restored_ami: When ``True``, include bootstrap user data even
-                when launching from ``ami_id_override``.
+            ami_source: AMI source mode for workstation launch. When unset, legacy
+                ``ami_id_override`` behavior is preserved.
+            selected_ami_id: Explicit AMI ID when using selected source mode.
+            bootstrap_on_restored_ami: Opt-in to run full bootstrap for restored AMIs.
             **kwargs: Additional ``Stack`` keyword args.
         """
         super().__init__(scope, construct_id, **kwargs)
@@ -99,18 +140,40 @@ class GastownWorkstationStack(Stack):
         sg = ec2.SecurityGroup(self, "GastownSG", vpc=vpc)
         sg.add_ingress_rule(ec2.Peer.any_ipv4(), ec2.Port.tcp(22), "Allow SSH")
 
-        ami_id = ami_id_override.strip() if ami_id_override else ""
-        if not ami_id:
-            # Default path: use Canonical Ubuntu image unless a deploy override is provided.
-            ubuntu_ami = ec2.MachineImage.lookup(
-                name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*",
-                owners=["099720109477"],  # Canonical
-                filters={"architecture": ["x86_64"]}
-            )
-            ami_id = ubuntu_ami.get_image(self).image_id
+        # Reason: preserve ``ami_id_override`` compatibility while supporting the
+        # new ``ami_source``/``selected_ami_id`` API.
+        effective_ami_source: Literal["default", "selected"]
+        effective_selected_ami_id: str | None = selected_ami_id
+        if ami_source is None:
+            if ami_id_override and ami_id_override.strip():
+                effective_ami_source = "selected"
+                effective_selected_ami_id = ami_id_override.strip()
+            else:
+                effective_ami_source = "default"
+        else:
+            effective_ami_source = ami_source
+            if (
+                effective_ami_source == "selected"
+                and (not effective_selected_ami_id or not effective_selected_ami_id.strip())
+                and ami_id_override
+                and ami_id_override.strip()
+            ):
+                effective_selected_ami_id = ami_id_override.strip()
 
-        # Reason: restored AMIs already contain bootstrapped state by design.
-        use_bootstrap = not ami_id_override or bootstrap_on_restored_ami
+        ami_id = resolve_ami_id(
+            stack=self,
+            ami_source=effective_ami_source,
+            selected_ami_id=effective_selected_ami_id,
+        )
+
+        should_include_bootstrap = (
+            effective_ami_source == "default"
+            or (
+                effective_ami_source == "selected"
+                and bootstrap_on_restored_ami
+            )
+        )
+
         launch_specification: dict[str, object] = {
             "image_id": ami_id,
             "instance_type": "t3.xlarge",
@@ -129,7 +192,7 @@ class GastownWorkstationStack(Stack):
                 }
             ],
         }
-        if use_bootstrap:
+        if should_include_bootstrap:
             launch_specification["user_data"] = build_bootstrap_user_data()
 
         # Spot Fleet Request
