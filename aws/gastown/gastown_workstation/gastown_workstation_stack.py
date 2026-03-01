@@ -153,6 +153,7 @@ class GastownWorkstationStack(Stack):
         else:
             effective_ami_source = ami_source
             if (
+                effective_ami_source == "selected"
                 and ami_id_override
                 and ami_id_override.strip()
             ):
