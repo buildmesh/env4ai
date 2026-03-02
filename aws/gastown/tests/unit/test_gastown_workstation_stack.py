@@ -9,6 +9,7 @@ from gastown_workstation.gastown_workstation_stack import (
     resolve_ami_id,
     resolve_subnet_availability_zone,
 )
+from environment_config import GASTOWN_ENVIRONMENT_SPEC
 
 
 class GastownWorkstationStackTests(unittest.TestCase):
@@ -192,6 +193,7 @@ class GastownWorkstationStackTests(unittest.TestCase):
         ):
             resolve_ami_id(
                 stack=stack,
+                environment_spec=GASTOWN_ENVIRONMENT_SPEC,
                 ami_source="restored",  # type: ignore[arg-type]
             )
 

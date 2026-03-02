@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import configparser
 from datetime import datetime
+import importlib.util
 import os
 from pathlib import Path
 from typing import Any
@@ -14,8 +15,37 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 
+def _load_environment_spec_from_cwd() -> Any | None:
+    """Load ``ENVIRONMENT_SPEC`` from cwd-local ``environment_config.py``.
+
+    Returns:
+        Environment spec object when available, otherwise ``None``.
+    """
+    module_path = Path.cwd() / "environment_config.py"
+    if not module_path.is_file():
+        return None
+
+    import_spec = importlib.util.spec_from_file_location(
+        "active_environment_config",
+        str(module_path),
+    )
+    if import_spec is None or import_spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(import_spec)
+    import_spec.loader.exec_module(module)
+    return getattr(module, "ENVIRONMENT_SPEC", None)
+
+
 def parse_args() -> argparse.Namespace:
     name = Path.cwd().name
+    environment_spec = _load_environment_spec_from_cwd()
+    default_stack_name = f"{name.capitalize()}WorkstationStack"
+    default_spot_fleet_logical_id = f"{name.capitalize()}SpotFleet"
+    default_ssh_alias = f"{name}-workstation"
+    if environment_spec is not None:
+        default_stack_name = str(environment_spec.stack_name)
+        default_spot_fleet_logical_id = str(environment_spec.spot_fleet_logical_id)
+        default_ssh_alias = str(environment_spec.ssh_alias)
 
     """Parse command-line arguments for instance lookup."""
     parser = argparse.ArgumentParser(
@@ -33,17 +63,17 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--stack-name",
-        default=f"{name.capitalize()}WorkstationStack",
+        default=default_stack_name,
         help="CloudFormation stack name.",
     )
     parser.add_argument(
         "--spot-fleet-logical-id",
-        default=f"{name.capitalize()}SpotFleet",
+        default=default_spot_fleet_logical_id,
         help="Logical ID of the Spot Fleet resource in the stack.",
     )
     parser.add_argument(
         "--ssh-host-alias",
-        default=f"{name}-workstation",
+        default=default_ssh_alias,
         help="Host alias to show in the SSH config snippet.",
     )
     parser.add_argument(

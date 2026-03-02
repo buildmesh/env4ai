@@ -7,7 +7,11 @@ from aws_cdk import (
 )
 from constructs import Construct
 import base64
+from pathlib import Path
 from typing import Literal
+
+from environment_config import GASTOWN_ENVIRONMENT_SPEC
+from workstation_core import EnvironmentSpec
 
 
 def resolve_subnet_availability_zone(availability_zone_index: int = 0) -> str:
@@ -28,31 +32,26 @@ def resolve_subnet_availability_zone(availability_zone_index: int = 0) -> str:
     return Fn.select(availability_zone_index, Fn.get_azs())
 
 
-def build_bootstrap_user_data() -> str:
+def build_bootstrap_user_data(bootstrap_files: tuple[str, ...]) -> str:
     """Return base64-encoded bootstrap user data for fresh Ubuntu launches.
+
+    Args:
+        bootstrap_files: Ordered init script filenames to concatenate.
 
     Returns:
         Base64-encoded concatenation of init scripts.
     """
-    filenames = [
-        "deps.sh",
-        "python.sh",
-        "docker.sh",
-        "android.sh",
-        "agents.sh",
-        "gastown.sh",
-    ]
-
     user_data_script = ""
-    for filename in filenames:
-        with open(f"init/{filename}", "r", encoding="utf-8") as fd:
-            user_data_script += fd.read()
+    for filename in bootstrap_files:
+        script_path = Path("init") / filename
+        user_data_script += script_path.read_text(encoding="utf-8")
 
     return base64.b64encode(user_data_script.encode("utf-8")).decode("utf-8")
 
 
 def resolve_ami_id(
     stack: Stack,
+    environment_spec: EnvironmentSpec,
     ami_source: Literal["default", "selected"] = "default",
     selected_ami_id: str | None = None,
 ) -> str:
@@ -60,6 +59,7 @@ def resolve_ami_id(
 
     Args:
         stack: Parent stack used for AMI lookup context.
+        environment_spec: Canonical environment AMI selector config.
         ami_source: AMI selection mode.
         selected_ami_id: Explicit AMI ID for ``selected`` mode.
 
@@ -70,10 +70,11 @@ def resolve_ami_id(
         ValueError: If AMI inputs are invalid.
     """
     if ami_source == "default":
+        selector = environment_spec.default_ami_selector
         ubuntu_ami = ec2.MachineImage.lookup(
-            name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*",
-            owners=["099720109477"],  # Canonical
-            filters={"architecture": ["x86_64"]},
+            name=selector.name,
+            owners=[selector.owner],
+            filters={key: list(value) for key, value in selector.filters.items()},
         )
         return ubuntu_ami.get_image(stack).image_id
 
@@ -98,6 +99,7 @@ class GastownWorkstationStack(Stack):
         ami_source: Literal["default", "selected"] | None = None,
         selected_ami_id: str | None = None,
         bootstrap_on_restored_ami: bool = False,
+        environment_spec: EnvironmentSpec = GASTOWN_ENVIRONMENT_SPEC,
         **kwargs,
     ) -> None:
         """Create the workstation infrastructure stack.
@@ -111,33 +113,49 @@ class GastownWorkstationStack(Stack):
                 ``ami_id_override`` behavior is preserved.
             selected_ami_id: Explicit AMI ID when using selected source mode.
             bootstrap_on_restored_ami: Opt-in to run full bootstrap for restored AMIs.
+            environment_spec: Canonical environment configuration and naming source.
             **kwargs: Additional ``Stack`` keyword args.
         """
         super().__init__(scope, construct_id, **kwargs)
 
-        # Create a new VPC named 'GastownVPC'
-        vpc = ec2.Vpc(self, "GastownVPC",
+        # Create a new VPC using environment-derived naming.
+        vpc = ec2.Vpc(self, environment_spec.construct_id("VPC"),
             max_azs=1,
             subnet_configuration=[]
         )
 
-        igw = ec2.CfnInternetGateway(self, "GastownIGW")
-        ec2.CfnVPCGatewayAttachment(self, "GastownIGWAttachment", vpc_id=vpc.vpc_id, internet_gateway_id=igw.ref)
+        igw = ec2.CfnInternetGateway(self, environment_spec.construct_id("IGW"))
+        ec2.CfnVPCGatewayAttachment(
+            self,
+            environment_spec.construct_id("IGWAttachment"),
+            vpc_id=vpc.vpc_id,
+            internet_gateway_id=igw.ref,
+        )
 
-        local_zone_subnet = ec2.CfnSubnet(self, "Lax1Subnet",
+        local_zone_subnet = ec2.CfnSubnet(self, environment_spec.construct_id("Subnet"),
             availability_zone=resolve_subnet_availability_zone(availability_zone_index),
             cidr_block="10.0.100.0/24",
             vpc_id=vpc.vpc_id,
             map_public_ip_on_launch=True
         )
 
-
-        route_table = ec2.CfnRouteTable(self, "GastownRouteTable", vpc_id=vpc.vpc_id)
-        ec2.CfnRoute(self, "GastownDefaultRoute", route_table_id=route_table.ref, destination_cidr_block="0.0.0.0/0", gateway_id=igw.ref)
-        ec2.CfnSubnetRouteTableAssociation(self, "GastownSubnetRouteTableAssociation", subnet_id=local_zone_subnet.ref, route_table_id=route_table.ref)
+        route_table = ec2.CfnRouteTable(self, environment_spec.construct_id("RouteTable"), vpc_id=vpc.vpc_id)
+        ec2.CfnRoute(
+            self,
+            environment_spec.construct_id("DefaultRoute"),
+            route_table_id=route_table.ref,
+            destination_cidr_block="0.0.0.0/0",
+            gateway_id=igw.ref,
+        )
+        ec2.CfnSubnetRouteTableAssociation(
+            self,
+            environment_spec.construct_id("SubnetRouteTableAssociation"),
+            subnet_id=local_zone_subnet.ref,
+            route_table_id=route_table.ref,
+        )
 
         # Security group for SSH (VNC tunneled over SSH)
-        sg = ec2.SecurityGroup(self, "GastownSG", vpc=vpc)
+        sg = ec2.SecurityGroup(self, environment_spec.construct_id("SG"), vpc=vpc)
         sg.add_ingress_rule(ec2.Peer.any_ipv4(), ec2.Port.tcp(22), "Allow SSH")
 
         # Reason: preserve ``ami_id_override`` compatibility while supporting the
@@ -170,6 +188,7 @@ class GastownWorkstationStack(Stack):
 
         ami_id = resolve_ami_id(
             stack=self,
+            environment_spec=environment_spec,
             ami_source=effective_ami_source,
             selected_ami_id=effective_selected_ami_id,
         )
@@ -184,7 +203,7 @@ class GastownWorkstationStack(Stack):
 
         launch_specification: dict[str, object] = {
             "image_id": ami_id,
-            "instance_type": "t3.xlarge",
+            "instance_type": environment_spec.instance_type,
             "key_name": "aws_key",
             "security_groups": [{"groupId": sg.security_group_id}],
             "subnet_id": local_zone_subnet.ref,
@@ -193,7 +212,7 @@ class GastownWorkstationStack(Stack):
                     "deviceName": "/dev/sda1",  # Typical root device for Ubuntu AMIs
                     "ebs": {
                         "deleteOnTermination": True,
-                        "volumeSize": 16,        # Request 24 GB
+                        "volumeSize": environment_spec.volume_size,
                         "volumeType": "gp3",     # Use gp3 for best price/performance
                         "encrypted": False       # Set to True if encryption is required
                     }
@@ -201,14 +220,16 @@ class GastownWorkstationStack(Stack):
             ],
         }
         if should_include_bootstrap:
-            launch_specification["user_data"] = build_bootstrap_user_data()
+            launch_specification["user_data"] = build_bootstrap_user_data(
+                environment_spec.bootstrap_files
+            )
 
         # Spot Fleet Request
-        ec2.CfnSpotFleet(self, "GastownSpotFleet",
+        ec2.CfnSpotFleet(self, environment_spec.spot_fleet_logical_id,
             spot_fleet_request_config_data=ec2.CfnSpotFleet.SpotFleetRequestConfigDataProperty(
                 iam_fleet_role="arn:aws:iam::{}:role/aws-ec2-spot-fleet-tagging-role".format(self.account),
                 target_capacity=1,
-                spot_price="0.1",
+                spot_price=environment_spec.spot_price,
                 launch_specifications=[
                     ec2.CfnSpotFleet.SpotFleetLaunchSpecificationProperty(**launch_specification)
                 ]

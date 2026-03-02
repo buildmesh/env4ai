@@ -147,4 +147,5 @@ This opens a shell inside the Docker container with AWS/CDK tooling.
 - `aws/gastown/` - CDK app, stack, init scripts, and tests
 - `aws/builder/` - CDK app, stack, init scripts, and tests
 - `aws/workstation_core/` - shared package for cross-environment workstation contracts/helpers
+  - includes canonical `EnvironmentSpec` model used to derive stack/logical naming consistently
 - `aws/iam/gastown/` - IAM policy files

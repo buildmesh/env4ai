@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import app as gastown_app
+from environment_config import GASTOWN_ENVIRONMENT_SPEC
 
 
 class AppResolverTests(unittest.TestCase):
@@ -66,9 +67,10 @@ class AppResolverTests(unittest.TestCase):
 
         stack_mock.assert_called_once_with(
             app_instance,
-            "GastownWorkstationStack",
+            GASTOWN_ENVIRONMENT_SPEC.stack_name,
             ami_id_override=None,
             bootstrap_on_restored_ami=False,
+            environment_spec=GASTOWN_ENVIRONMENT_SPEC,
             env=environment_obj,
         )
         app_instance.synth.assert_called_once()
@@ -92,9 +94,10 @@ class AppResolverTests(unittest.TestCase):
 
         stack_mock.assert_called_once_with(
             app_instance,
-            "GastownWorkstationStack",
+            GASTOWN_ENVIRONMENT_SPEC.stack_name,
             ami_id_override="ami-override123",
             bootstrap_on_restored_ami=False,
+            environment_spec=GASTOWN_ENVIRONMENT_SPEC,
             env=environment_obj,
         )
         app_instance.synth.assert_called_once()
