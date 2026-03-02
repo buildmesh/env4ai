@@ -6,10 +6,9 @@ from aws_cdk.assertions import Match
 
 from gastown_workstation.gastown_workstation_stack import (
     GastownWorkstationStack,
-    resolve_ami_id,
-    resolve_subnet_availability_zone,
 )
 from environment_config import GASTOWN_ENVIRONMENT_SPEC
+from workstation_core.cdk_helpers import resolve_ami_id, resolve_subnet_availability_zone
 
 
 class GastownWorkstationStackTests(unittest.TestCase):
