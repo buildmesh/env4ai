@@ -166,3 +166,38 @@ This opens a shell inside the Docker container with AWS/CDK tooling.
 - `aws/workstation_core/` - shared package for cross-environment workstation contracts/helpers
   - includes canonical `EnvironmentSpec` model used to derive stack/logical naming consistently
 - `aws/iam/gastown/` - IAM policy files
+
+## Adding A New Environment From Shared Core
+
+Use `aws/workstation_core` as the single source of truth and only keep environment-specific values in the environment module.
+
+1. Create `<env>/environment_config.py` with one `ENVIRONMENT_SPEC` (`EnvironmentSpec`) instance.
+2. Set the required per-environment knobs in that spec:
+   - `environment_key` (for AMI naming and SSH alias)
+   - `display_name` (for CloudFormation/construct naming)
+   - `bootstrap_files`
+   - `default_ami_selector`
+   - `instance_type`, `volume_size`, `spot_price`
+3. Keep naming derived from the spec properties instead of hardcoded literals:
+   - Stack name: `ENVIRONMENT_SPEC.stack_name`
+   - Spot Fleet logical id: `ENVIRONMENT_SPEC.spot_fleet_logical_id`
+   - Saved AMI prefix: `ENVIRONMENT_SPEC.ami_prefix` (`<environment>_`)
+4. Wire the target in `Makefile` using the shared scripts pattern used by `gastown`:
+   - Start/deploy: `uv run scripts/deploy_workstation.py --environment <env> --stack-dir /home/user/<env> --stack-name <DisplayName>WorkstationStack`
+   - Stop/destroy: `uv run scripts/stop_workstation.py --environment <env> --stack-dir /home/user/<env> --stack-name <DisplayName>WorkstationStack`
+5. Validate AMI lifecycle behavior for the new environment:
+   - List only: `AMI_LIST=1 make <env>`
+   - Load exact AMI name: `AMI_LOAD=20260301 make <env>` (resolves `<env>_20260301`)
+   - List + pick: `AMI_LIST=1 AMI_PICK=1 make <env>`
+   - Save on stop: `AMI_SAVE=1 AMI_TAG=20260302 make <env> ACTION=STOP`
+   - Legacy/default deploy (no AMI flags): `make <env>`
+
+IAM note:
+- AMI list/load flows require `ec2:DescribeImages`.
+- Save-on-stop requires permissions used by `create_image` and AMI state checks in `aws/workstation_core/ami_lifecycle.py`.
+
+Rollback path:
+- Unset AMI flags and run normal commands:
+  - `unset AMI_LOAD AMI_LIST AMI_PICK AMI_SAVE AMI_TAG`
+  - `make <env>`
+  - `make <env> ACTION=STOP`
