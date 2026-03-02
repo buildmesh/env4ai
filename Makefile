@@ -16,7 +16,7 @@ gastown:
 ifeq ($(ACTION),START)
 	docker compose run --rm aws bash -lc "cd /home/user && uv run scripts/deploy_workstation.py --environment gastown --stack-dir /home/user/gastown --stack-name GastownWorkstationStack"
 else ifeq ($(ACTION),STOP)
-	docker compose run --rm aws bash -lc "cd gastown && uv run cdk destroy --force"
+	docker compose run --rm aws bash -lc "cd /home/user && uv run scripts/stop_workstation.py --environment gastown --stack-dir /home/user/gastown --stack-name GastownWorkstationStack"
 else
 	@echo "Invalid ACTION=$(ACTION)"
 endif

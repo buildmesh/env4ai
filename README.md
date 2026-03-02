@@ -85,20 +85,14 @@ AMI naming convention and states:
 - Deploy from a listed AMI should use an `available` image; `pending` images are still creating and may fail to launch.
 
 Save-on-stop workflow:
-- There is currently no `AMI_SAVE`/`AMI_TAG` Make variable in this repo.
-- To preserve the current workstation before destroy, create and wait for an AMI manually, then run stop:
+- `AMI_SAVE=1` with `AMI_TAG=<tag>` saves AMI `<environment>_<tag>` from the current running workstation instance before destroy.
+- If AMI creation fails or does not become `available` before timeout, destroy is aborted.
 
 ```bash
-# Example: create a named AMI from your current workstation instance
-aws ec2 create-image \
-  --instance-id <instance-id> \
-  --name gastown_20260301 \
-  --no-reboot
+# Save current workstation as AMI gastown_20260302, then destroy stack
+AMI_SAVE=1 AMI_TAG=20260302 make gastown ACTION=STOP
 
-# Wait until the image is usable before destroy
-aws ec2 wait image-available --image-ids <ami-id>
-
-# Then destroy the stack
+# Default stop behavior is unchanged when AMI_SAVE is not set
 make gastown ACTION=STOP
 ```
 
@@ -122,8 +116,8 @@ make gastown ACTION=STOP
 This destroys the deployed stack and stops billing for the workstation resources.
 
 Save-on-stop note:
-- Current `ACTION=STOP` flow does not accept an AMI save variable in this repository state.
-- To preserve instance state as an AMI, create the image manually before stop, then deploy later with `AMI_LOAD=<tag>`.
+- Set `AMI_SAVE=1 AMI_TAG=<tag>` to save and wait for AMI `<environment>_<tag>` before destroy.
+- Without `AMI_SAVE`, stop behavior remains a direct destroy.
 
 ### Enter the tooling container
 
