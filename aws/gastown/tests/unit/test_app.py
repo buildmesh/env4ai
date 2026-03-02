@@ -52,7 +52,7 @@ class AppResolverTests(unittest.TestCase):
     def test_main_uses_default_bootstrap_path_when_ami_context_missing(self) -> None:
         """Expected: app.main passes no AMI override when context is absent."""
         app_instance = Mock()
-        app_instance.node.try_get_context.return_value = None
+        app_instance.node.try_get_context.side_effect = lambda _key: None
         environment_obj = Mock()
 
         with (
@@ -68,6 +68,7 @@ class AppResolverTests(unittest.TestCase):
             app_instance,
             "GastownWorkstationStack",
             ami_id_override=None,
+            bootstrap_on_restored_ami=False,
             env=environment_obj,
         )
         app_instance.synth.assert_called_once()
@@ -75,7 +76,9 @@ class AppResolverTests(unittest.TestCase):
     def test_main_uses_trimmed_ami_override_when_context_present(self) -> None:
         """Edge: app.main trims context AMI value before passing override."""
         app_instance = Mock()
-        app_instance.node.try_get_context.return_value = " ami-override123 "
+        app_instance.node.try_get_context.side_effect = (
+            lambda key: " ami-override123 " if key == "ami_id" else None
+        )
         environment_obj = Mock()
 
         with (
@@ -91,6 +94,7 @@ class AppResolverTests(unittest.TestCase):
             app_instance,
             "GastownWorkstationStack",
             ami_id_override="ami-override123",
+            bootstrap_on_restored_ami=False,
             env=environment_obj,
         )
         app_instance.synth.assert_called_once()
@@ -98,7 +102,7 @@ class AppResolverTests(unittest.TestCase):
     def test_main_propagates_account_resolution_failure(self) -> None:
         """Failure: account resolution error bubbles up and aborts synth."""
         app_instance = Mock()
-        app_instance.node.try_get_context.return_value = None
+        app_instance.node.try_get_context.side_effect = lambda _key: None
 
         with (
             patch("app.cdk.App", return_value=app_instance),
