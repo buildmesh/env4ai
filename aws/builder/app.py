@@ -6,6 +6,7 @@ from typing import Mapping
 
 import aws_cdk as cdk
 
+from environment_config import BUILDER_ENVIRONMENT_SPEC
 from builder_workstation.builder_workstation_stack import BuilderWorkstationStack
 
 def get_profile_name(env: Mapping[str, str] | None = None) -> str:
@@ -144,7 +145,8 @@ def main() -> None:
     app = cdk.App()
     BuilderWorkstationStack(
         app,
-        "BuilderWorkstationStack",
+        BUILDER_ENVIRONMENT_SPEC.stack_name,
+        environment_spec=BUILDER_ENVIRONMENT_SPEC,
         env=cdk.Environment(account=get_account(), region=get_region()),
     )
     app.synth()

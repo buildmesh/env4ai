@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import logging
 import os
+from pathlib import Path
 import subprocess
 import sys
 from typing import Callable, Sequence, TextIO
@@ -60,6 +62,30 @@ def build_ami_lookup_error_message(scope: str) -> str:
         f"Unable to {scope} because AMI lookup failed. "
         "Verify AWS credentials, region, and ec2:DescribeImages permission."
     )
+
+
+def load_environment_spec(stack_dir: str) -> object | None:
+    """Load ``ENVIRONMENT_SPEC`` from a stack directory when available.
+
+    Args:
+        stack_dir: Environment stack directory path.
+
+    Returns:
+        Environment spec object when resolvable, otherwise ``None``.
+    """
+    module_path = Path(stack_dir) / "environment_config.py"
+    if not module_path.is_file():
+        return None
+
+    import_spec = importlib.util.spec_from_file_location(
+        "active_environment_config",
+        str(module_path),
+    )
+    if import_spec is None or import_spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(import_spec)
+    import_spec.loader.exec_module(module)
+    return getattr(module, "ENVIRONMENT_SPEC", None)
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -361,6 +387,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     selected_ami_id: str | None = None
+    environment_spec = load_environment_spec(stack_dir=args.stack_dir)
+    environment_key = args.environment
+    if environment_spec is not None:
+        # Reason: use canonical naming from environment spec when available.
+        environment_key = str(environment_spec.environment_key)
+
     profile = args.profile if args.profile is not None else os.environ.get("AWS_PROFILE")
     region = args.region if args.region is not None else os.environ.get("AWS_REGION")
     if region is None:
@@ -369,14 +401,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     ec2_client = make_ec2_client(profile=profile, region=region)
     should_check_ami_permissions = bool(ami_load_tag or ami_list)
     if should_check_ami_permissions:
-        run_ami_permission_preflight(ec2_client, environment=args.environment)
+        run_ami_permission_preflight(ec2_client, environment=environment_key)
 
     if ami_load_tag:
-        expected_name = f"{args.environment}_{ami_load_tag}"
+        expected_name = f"{environment_key}_{ami_load_tag}"
         selected_ami_id = resolve_exact_image_id(ec2_client, expected_name=expected_name)
         print(f"Resolved AMI {expected_name} -> {selected_ami_id}")
     elif ami_list:
-        images = list_environment_images(ec2_client, environment=args.environment)
+        images = list_environment_images(ec2_client, environment=environment_key)
         print_image_list(images)
         if not ami_pick:
             return 0

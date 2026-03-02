@@ -6,6 +6,7 @@ from typing import Mapping
 
 import aws_cdk as cdk
 
+from environment_config import GASTOWN_ENVIRONMENT_SPEC
 from gastown_workstation.gastown_workstation_stack import GastownWorkstationStack
 
 def get_profile_name(env: Mapping[str, str] | None = None) -> str:
@@ -186,9 +187,10 @@ def main() -> None:
 
     GastownWorkstationStack(
         app,
-        "GastownWorkstationStack",
+        GASTOWN_ENVIRONMENT_SPEC.stack_name,
         ami_id_override=ami_id_override,
         bootstrap_on_restored_ami=bootstrap_on_restored_ami,
+        environment_spec=GASTOWN_ENVIRONMENT_SPEC,
         env=cdk.Environment(account=get_account(), region=get_region()),
     )
     app.synth()

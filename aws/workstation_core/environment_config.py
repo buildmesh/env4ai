@@ -1,0 +1,104 @@
+"""Environment-level workstation specification and naming helpers."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Mapping
+
+
+@dataclass(frozen=True, slots=True)
+class AmiSelectorConfig:
+    """Default AMI lookup parameters for an environment.
+
+    Args:
+        owner: AMI owner account id for ``MachineImage.lookup``.
+        name: AMI name glob used by ``MachineImage.lookup``.
+        filters: Additional EC2 image lookup filters.
+    """
+
+    owner: str
+    name: str
+    filters: Mapping[str, tuple[str, ...]]
+
+
+@dataclass(frozen=True, slots=True)
+class EnvironmentSpec:
+    """Canonical workstation spec for one environment.
+
+    Args:
+        environment_key: Stable key (for example ``gastown`` or ``builder``).
+        display_name: Human-facing title-cased name (for example ``Gastown``).
+        bootstrap_files: Ordered init script filenames to concatenate.
+        default_ami_selector: Default AMI selector configuration.
+        instance_type: EC2 instance type for Spot launch.
+        volume_size: Root EBS volume size in GiB.
+        spot_price: Spot max price as a string (for example ``"0.1"``).
+    """
+
+    environment_key: str
+    display_name: str
+    bootstrap_files: tuple[str, ...]
+    default_ami_selector: AmiSelectorConfig
+    instance_type: str
+    volume_size: int
+    spot_price: str
+
+    @property
+    def stack_name(self) -> str:
+        """Return the CloudFormation stack name for this environment."""
+        return f"{self.display_name}WorkstationStack"
+
+    @property
+    def spot_fleet_logical_id(self) -> str:
+        """Return the Spot Fleet logical id for this environment."""
+        return f"{self.display_name}SpotFleet"
+
+    @property
+    def ami_prefix(self) -> str:
+        """Return the AMI name prefix for saved environment images."""
+        return f"{self.environment_key}_"
+
+    @property
+    def ssh_alias(self) -> str:
+        """Return the default SSH config host alias."""
+        return f"{self.environment_key}-workstation"
+
+    def construct_id(self, suffix: str) -> str:
+        """Return a construct id prefixed by display name.
+
+        Args:
+            suffix: Suffix token (for example ``VPC`` or ``RouteTable``).
+
+        Returns:
+            Prefixed construct id.
+        """
+        return f"{self.display_name}{suffix}"
+
+
+def validate_environment_spec(spec: EnvironmentSpec) -> None:
+    """Validate required fields and constraints for an environment spec.
+
+    Args:
+        spec: Environment spec to validate.
+
+    Raises:
+        ValueError: If any required field is empty or invalid.
+    """
+    if not spec.environment_key.strip():
+        raise ValueError("EnvironmentSpec.environment_key must be non-empty.")
+    if not spec.display_name.strip():
+        raise ValueError("EnvironmentSpec.display_name must be non-empty.")
+    if not spec.bootstrap_files:
+        raise ValueError("EnvironmentSpec.bootstrap_files must contain at least one file.")
+    if not spec.instance_type.strip():
+        raise ValueError("EnvironmentSpec.instance_type must be non-empty.")
+    if spec.volume_size <= 0:
+        raise ValueError("EnvironmentSpec.volume_size must be greater than 0.")
+    if not spec.spot_price.strip():
+        raise ValueError("EnvironmentSpec.spot_price must be non-empty.")
+    if not spec.default_ami_selector.owner.strip():
+        raise ValueError("AmiSelectorConfig.owner must be non-empty.")
+    if not spec.default_ami_selector.name.strip():
+        raise ValueError("AmiSelectorConfig.name must be non-empty.")
+    if not spec.default_ami_selector.filters:
+        raise ValueError("AmiSelectorConfig.filters must be non-empty.")
