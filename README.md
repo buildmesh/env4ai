@@ -145,4 +145,6 @@ This opens a shell inside the Docker container with AWS/CDK tooling.
 - `Makefile` - primary entrypoints
 - `docker-compose.yaml` - local container + AWS config mount + secrets wiring
 - `aws/gastown/` - CDK app, stack, init scripts, and tests
+- `aws/builder/` - CDK app, stack, init scripts, and tests
+- `aws/workstation_core/` - shared package for cross-environment workstation contracts/helpers
 - `aws/iam/gastown/` - IAM policy files

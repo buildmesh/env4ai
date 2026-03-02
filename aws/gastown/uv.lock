@@ -134,6 +134,7 @@ dependencies = [
     { name = "aws-cdk-lib" },
     { name = "boto3" },
     { name = "constructs" },
+    { name = "workstation-core" },
 ]
 
 [package.metadata]
@@ -141,6 +142,7 @@ requires-dist = [
     { name = "aws-cdk-lib", specifier = "==2.108.1" },
     { name = "boto3", specifier = "==1.28.73" },
     { name = "constructs", specifier = ">=10.0.0,<11.0.0" },
+    { name = "workstation-core", editable = "../workstation_core" },
 ]
 
 [[package]]
@@ -247,3 +249,8 @@ sdist = { url = "https://files.pythonhosted.org/packages/af/47/b215df9f71b4fdba1
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d2/b2/b157855192a68541a91ba7b2bbcb91f1b4faa51f8bae38d8005c034be524/urllib3-2.0.7-py3-none-any.whl", hash = "sha256:fdb6d215c776278489906c2f8916e6e7d4f5a9b602ccbcfdf7f016fc8da0596e", size = 124213, upload-time = "2023-10-17T17:46:48.538Z" },
 ]
+
+[[package]]
+name = "workstation-core"
+version = "0.1.0"
+source = { editable = "../workstation_core" }
