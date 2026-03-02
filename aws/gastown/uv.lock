@@ -254,3 +254,9 @@ wheels = [
 name = "workstation-core"
 version = "0.1.0"
 source = { editable = "../workstation_core" }
+dependencies = [
+    { name = "boto3" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "boto3" }]
