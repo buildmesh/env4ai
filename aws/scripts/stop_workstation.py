@@ -11,7 +11,7 @@ from typing import Sequence
 
 import boto3
 
-from deploy_workstation import load_environment_spec, run_command
+from workstation_core.orchestration import load_environment_spec, run_command
 from workstation_core import (
     StopOrchestrationInputs,
     build_stop_image_name,
