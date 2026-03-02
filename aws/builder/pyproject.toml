@@ -7,4 +7,8 @@ dependencies = [
     "aws-cdk-lib==2.108.1",
     "boto3==1.28.73",
     "constructs>=10.0.0,<11.0.0",
+    "workstation-core",
 ]
+
+[tool.uv.sources]
+workstation-core = { path = "../workstation_core", editable = true }

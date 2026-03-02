@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=69.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "workstation-core"
+version = "0.1.0"
+description = "Shared workstation foundations for AWS environment stacks"
+requires-python = ">=3.14,<3.15"
+dependencies = []
+
+[tool.setuptools]
+packages = ["workstation_core"]
+
+[tool.setuptools.package-dir]
+workstation_core = "."
