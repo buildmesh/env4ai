@@ -55,7 +55,11 @@ class DeployWorkstationScriptTests(unittest.TestCase):
             result = main()
 
         self.assertEqual(0, result)
-        deploy_stack_mock.assert_called_once_with(stack_dir="/tmp/gastown", ami_id=None)
+        deploy_stack_mock.assert_called_once_with(
+            stack_dir="/tmp/gastown",
+            ami_id=None,
+            bootstrap_on_restored_ami=False,
+        )
         post_check_mock.assert_called_once_with(
             stack_dir="/tmp/gastown",
             stack_name="GastownWorkstationStack",
@@ -79,7 +83,11 @@ class DeployWorkstationScriptTests(unittest.TestCase):
             result = main()
 
         self.assertEqual(0, result)
-        deploy_stack_mock.assert_called_once_with(stack_dir="/tmp/gastown", ami_id="ami-load")
+        deploy_stack_mock.assert_called_once_with(
+            stack_dir="/tmp/gastown",
+            ami_id="ami-load",
+            bootstrap_on_restored_ami=False,
+        )
         post_check_mock.assert_called_once_with(
             stack_dir="/tmp/gastown",
             stack_name="GastownWorkstationStack",
@@ -173,7 +181,11 @@ class DeployWorkstationScriptTests(unittest.TestCase):
             result = main()
 
         self.assertEqual(0, result)
-        deploy_stack_mock.assert_called_once_with(stack_dir="/tmp/gastown", ami_id="ami-b")
+        deploy_stack_mock.assert_called_once_with(
+            stack_dir="/tmp/gastown",
+            ami_id="ami-b",
+            bootstrap_on_restored_ami=False,
+        )
         post_check_mock.assert_called_once_with(
             stack_dir="/tmp/gastown",
             stack_name="GastownWorkstationStack",
