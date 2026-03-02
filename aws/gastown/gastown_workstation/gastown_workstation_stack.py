@@ -1,91 +1,19 @@
 from aws_cdk import (
     CfnOutput,
-    Fn,
     Stack,
     aws_ec2 as ec2,
     aws_iam as iam,
 )
 from constructs import Construct
-import base64
-from pathlib import Path
 from typing import Literal
 
 from environment_config import GASTOWN_ENVIRONMENT_SPEC
 from workstation_core import EnvironmentSpec
-
-
-def resolve_subnet_availability_zone(availability_zone_index: int = 0) -> str:
-    """Return a dynamic AZ token from the deployment region.
-
-    Args:
-        availability_zone_index: The zero-based index into region AZs.
-
-    Returns:
-        A CloudFormation token selecting an AZ from ``Fn::GetAZs``.
-
-    Raises:
-        ValueError: If ``availability_zone_index`` is negative.
-    """
-    if availability_zone_index < 0:
-        raise ValueError("availability_zone_index must be greater than or equal to 0")
-
-    return Fn.select(availability_zone_index, Fn.get_azs())
-
-
-def build_bootstrap_user_data(bootstrap_files: tuple[str, ...]) -> str:
-    """Return base64-encoded bootstrap user data for fresh Ubuntu launches.
-
-    Args:
-        bootstrap_files: Ordered init script filenames to concatenate.
-
-    Returns:
-        Base64-encoded concatenation of init scripts.
-    """
-    user_data_script = ""
-    for filename in bootstrap_files:
-        script_path = Path("init") / filename
-        user_data_script += script_path.read_text(encoding="utf-8")
-
-    return base64.b64encode(user_data_script.encode("utf-8")).decode("utf-8")
-
-
-def resolve_ami_id(
-    stack: Stack,
-    environment_spec: EnvironmentSpec,
-    ami_source: Literal["default", "selected"] = "default",
-    selected_ami_id: str | None = None,
-) -> str:
-    """Resolve the AMI ID to use for the workstation launch.
-
-    Args:
-        stack: Parent stack used for AMI lookup context.
-        environment_spec: Canonical environment AMI selector config.
-        ami_source: AMI selection mode.
-        selected_ami_id: Explicit AMI ID for ``selected`` mode.
-
-    Returns:
-        AMI ID to use in the launch specification.
-
-    Raises:
-        ValueError: If AMI inputs are invalid.
-    """
-    if ami_source == "default":
-        selector = environment_spec.default_ami_selector
-        ubuntu_ami = ec2.MachineImage.lookup(
-            name=selector.name,
-            owners=[selector.owner],
-            filters={key: list(value) for key, value in selector.filters.items()},
-        )
-        return ubuntu_ami.get_image(stack).image_id
-
-    if ami_source == "selected":
-        if not selected_ami_id or not selected_ami_id.strip():
-            raise ValueError(
-                "selected_ami_id is required when ami_source is 'selected'"
-            )
-        return selected_ami_id.strip()
-
-    raise ValueError("ami_source must be either 'default' or 'selected'")
+from workstation_core.cdk_helpers import (
+    build_spot_fleet_launch_specification,
+    resolve_ami_id,
+    resolve_subnet_availability_zone,
+)
 
 
 class GastownWorkstationStack(Stack):
@@ -201,28 +129,15 @@ class GastownWorkstationStack(Stack):
             )
         )
 
-        launch_specification: dict[str, object] = {
-            "image_id": ami_id,
-            "instance_type": environment_spec.instance_type,
-            "key_name": "aws_key",
-            "security_groups": [{"groupId": sg.security_group_id}],
-            "subnet_id": local_zone_subnet.ref,
-            "block_device_mappings": [
-                {
-                    "deviceName": "/dev/sda1",  # Typical root device for Ubuntu AMIs
-                    "ebs": {
-                        "deleteOnTermination": True,
-                        "volumeSize": environment_spec.volume_size,
-                        "volumeType": "gp3",     # Use gp3 for best price/performance
-                        "encrypted": False       # Set to True if encryption is required
-                    }
-                }
-            ],
-        }
-        if should_include_bootstrap:
-            launch_specification["user_data"] = build_bootstrap_user_data(
-                environment_spec.bootstrap_files
-            )
+        launch_specification = build_spot_fleet_launch_specification(
+            ami_id=ami_id,
+            instance_type=environment_spec.instance_type,
+            security_group_id=sg.security_group_id,
+            subnet_id=local_zone_subnet.ref,
+            volume_size=environment_spec.volume_size,
+            include_bootstrap_user_data=should_include_bootstrap,
+            bootstrap_files=environment_spec.bootstrap_files,
+        )
 
         # Spot Fleet Request
         ec2.CfnSpotFleet(self, environment_spec.spot_fleet_logical_id,

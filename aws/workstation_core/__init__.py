@@ -4,7 +4,14 @@ This package defines cross-environment foundations that can be reused by
 multiple AWS workstation applications.
 """
 
-from workstation_core.cdk_helpers import CdkTarget, build_stack_name
+from workstation_core.cdk_helpers import (
+    CdkTarget,
+    build_bootstrap_user_data,
+    build_spot_fleet_launch_specification,
+    build_stack_name,
+    resolve_ami_id,
+    resolve_subnet_availability_zone,
+)
 from workstation_core.config import CoreConfig
 from workstation_core.environment_config import (
     AmiSelectorConfig,
@@ -31,7 +38,11 @@ __all__ = [
     "EnvironmentSpec",
     "OrchestrationPlan",
     "RuntimeContext",
+    "build_bootstrap_user_data",
+    "build_spot_fleet_launch_specification",
     "build_stack_name",
+    "resolve_ami_id",
+    "resolve_subnet_availability_zone",
     "validate_environment_spec",
     "validate_plan",
     "get_account",
