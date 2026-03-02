@@ -37,7 +37,7 @@ Defined in [`aws/gastown/gastown_workstation/gastown_workstation_stack.py`](../.
 ## Operational Entry Points
 
 - Deploy/start: `make gastown` (`ACTION=START` default) via [`Makefile`](../../Makefile)
-  - AMI controls: `AMI_LOAD`, `AMI_LIST`, `AMI_PICK` via [`aws/scripts/deploy_workstation.py`](../../aws/scripts/deploy_workstation.py)
+  - AMI controls: `AMI_LOAD`, `AMI_LIST`, `AMI_PICK` via thin wrapper [`aws/scripts/deploy_workstation.py`](../../aws/scripts/deploy_workstation.py), delegated to shared modules [`aws/workstation_core/ami_lifecycle.py`](../../aws/workstation_core/ami_lifecycle.py) and [`aws/workstation_core/orchestration.py`](../../aws/workstation_core/orchestration.py)
 - Destroy/stop: `make gastown ACTION=STOP`
   - No save-on-stop Make variable is currently implemented; AMI preservation requires manual EC2 `create-image` + `wait image-available` before destroy.
 - Post-deploy instance lookup + SSH snippet:

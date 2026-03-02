@@ -4,6 +4,22 @@ This package defines cross-environment foundations that can be reused by
 multiple AWS workstation applications.
 """
 
+from workstation_core.ami_lifecycle import (
+    AmiModeConfig,
+    AmiSelectionResult,
+    build_ami_lookup_error_message,
+    create_image_from_instance,
+    is_truthy,
+    list_environment_images,
+    pick_image_interactively,
+    read_ami_mode_from_env,
+    resolve_ami_selection,
+    resolve_exact_image_id,
+    resolve_running_instance_id,
+    run_ami_permission_preflight,
+    validate_mode_arguments,
+    wait_for_image_available,
+)
 from workstation_core.cdk_helpers import (
     CdkTarget,
     build_bootstrap_user_data,
@@ -12,11 +28,6 @@ from workstation_core.cdk_helpers import (
     resolve_ami_id,
     resolve_subnet_availability_zone,
 )
-from workstation_core.ami_lifecycle import (
-    create_image_from_instance,
-    resolve_running_instance_id,
-    wait_for_image_available,
-)
 from workstation_core.config import CoreConfig
 from workstation_core.environment_config import (
     AmiSelectorConfig,
@@ -24,10 +35,17 @@ from workstation_core.environment_config import (
     validate_environment_spec,
 )
 from workstation_core.orchestration import (
+    DeployWorkflowInputs,
     OrchestrationPlan,
     StopOrchestrationInputs,
     build_stop_image_name,
+    deploy_stack,
+    load_environment_spec,
+    make_ec2_client,
     parse_stop_ami_config,
+    run_command,
+    run_deploy_lifecycle,
+    run_post_deploy_check,
     run_stop_orchestration,
     validate_plan,
 )
@@ -45,22 +63,40 @@ from workstation_core.runtime_resolution import (
 
 __all__ = [
     "AmiSelectorConfig",
+    "AmiModeConfig",
+    "AmiSelectionResult",
     "CdkTarget",
     "CoreConfig",
+    "DeployWorkflowInputs",
     "EnvironmentSpec",
     "OrchestrationPlan",
     "StopOrchestrationInputs",
     "RuntimeContext",
+    "build_ami_lookup_error_message",
     "build_bootstrap_user_data",
     "build_spot_fleet_launch_specification",
     "build_stack_name",
+    "deploy_stack",
     "resolve_ami_id",
     "resolve_subnet_availability_zone",
     "validate_environment_spec",
+    "is_truthy",
+    "list_environment_images",
+    "load_environment_spec",
+    "make_ec2_client",
+    "pick_image_interactively",
+    "read_ami_mode_from_env",
+    "resolve_ami_selection",
+    "resolve_exact_image_id",
+    "run_ami_permission_preflight",
+    "run_command",
+    "run_deploy_lifecycle",
+    "run_post_deploy_check",
     "validate_plan",
     "build_stop_image_name",
     "parse_stop_ami_config",
     "run_stop_orchestration",
+    "validate_mode_arguments",
     "resolve_running_instance_id",
     "create_image_from_instance",
     "wait_for_image_available",

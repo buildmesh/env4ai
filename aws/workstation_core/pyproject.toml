@@ -7,7 +7,7 @@ name = "workstation-core"
 version = "0.1.0"
 description = "Shared workstation foundations for AWS environment stacks"
 requires-python = ">=3.14,<3.15"
-dependencies = []
+dependencies = ["boto3"]
 
 [tool.setuptools]
 packages = ["workstation_core"]

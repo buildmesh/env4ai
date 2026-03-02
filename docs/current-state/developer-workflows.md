@@ -26,7 +26,7 @@ From [`Makefile`](../../Makefile):
 
 ## AMI Option Behavior And Rollback
 
-Operational behavior (implemented in [`aws/scripts/deploy_workstation.py`](../../aws/scripts/deploy_workstation.py)):
+Operational behavior (entrypoint [`aws/scripts/deploy_workstation.py`](../../aws/scripts/deploy_workstation.py), shared implementation in [`aws/workstation_core/ami_lifecycle.py`](../../aws/workstation_core/ami_lifecycle.py) and [`aws/workstation_core/orchestration.py`](../../aws/workstation_core/orchestration.py)):
 
 - `AMI_LOAD=<tag>` resolves `<environment>_<tag>` and deploys with the matched AMI ID.
 - `AMI_LIST=1` prints matching AMIs and exits without deploying.
@@ -113,7 +113,7 @@ After deployment:
 - Region/account resolution errors: inspect [`aws/gastown/app.py`](../../aws/gastown/app.py) and mounted secrets/config.
 - Instance discovery/SSH issues: inspect [`aws/scripts/check_instance.py`](../../aws/scripts/check_instance.py).
 - Stack-level provisioning behavior: inspect [`aws/gastown/gastown_workstation/gastown_workstation_stack.py`](../../aws/gastown/gastown_workstation/gastown_workstation_stack.py).
-- AMI load/list/pick behavior and errors: inspect [`aws/scripts/deploy_workstation.py`](../../aws/scripts/deploy_workstation.py).
+- AMI load/list/pick behavior and errors: inspect shared modules [`aws/workstation_core/ami_lifecycle.py`](../../aws/workstation_core/ami_lifecycle.py) and [`aws/workstation_core/orchestration.py`](../../aws/workstation_core/orchestration.py) first, then wrapper [`aws/scripts/deploy_workstation.py`](../../aws/scripts/deploy_workstation.py).
 
 ## Rollback To Legacy Flow
 
