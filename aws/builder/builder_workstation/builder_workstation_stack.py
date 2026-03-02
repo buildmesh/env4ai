@@ -1,33 +1,19 @@
 from aws_cdk import (
     CfnOutput,
-    Fn,
     Stack,
     aws_ec2 as ec2,
     aws_iam as iam,
 )
 from constructs import Construct
-import base64
-from pathlib import Path
+from typing import Literal
 
 from environment_config import BUILDER_ENVIRONMENT_SPEC
 from workstation_core import EnvironmentSpec
-
-def resolve_subnet_availability_zone(availability_zone_index: int = 0) -> str:
-    """Return a dynamic AZ token from the deployment region.
-
-    Args:
-        availability_zone_index: The zero-based index into region AZs.
-
-    Returns:
-        A CloudFormation token selecting an AZ from ``Fn::GetAZs``.
-
-    Raises:
-        ValueError: If ``availability_zone_index`` is negative.
-    """
-    if availability_zone_index < 0:
-        raise ValueError("availability_zone_index must be greater than or equal to 0")
-
-    return Fn.select(availability_zone_index, Fn.get_azs())
+from workstation_core.cdk_helpers import (
+    build_spot_fleet_launch_specification,
+    resolve_ami_id,
+    resolve_subnet_availability_zone,
+)
 
 
 class BuilderWorkstationStack(Stack):
@@ -37,6 +23,10 @@ class BuilderWorkstationStack(Stack):
         scope: Construct,
         construct_id: str,
         availability_zone_index: int = 0,
+        ami_id_override: str | None = None,
+        ami_source: Literal["default", "selected"] | None = None,
+        selected_ami_id: str | None = None,
+        bootstrap_on_restored_ami: bool = False,
         environment_spec: EnvironmentSpec = BUILDER_ENVIRONMENT_SPEC,
         **kwargs,
     ) -> None:
@@ -46,6 +36,11 @@ class BuilderWorkstationStack(Stack):
             scope: Construct scope.
             construct_id: Logical construct id.
             availability_zone_index: Selected AZ index for workstation subnet.
+            ami_id_override: Optional explicit AMI ID used for deploy-time restore flows.
+            ami_source: AMI source mode for workstation launch. When unset, legacy
+                ``ami_id_override`` behavior is preserved.
+            selected_ami_id: Explicit AMI ID when using selected source mode.
+            bootstrap_on_restored_ami: Opt-in to run full bootstrap for restored AMIs.
             environment_spec: Canonical environment configuration and naming source.
             **kwargs: Additional ``Stack`` keyword args.
         """
@@ -91,23 +86,57 @@ class BuilderWorkstationStack(Stack):
         sg = ec2.SecurityGroup(self, environment_spec.construct_id("SG"), vpc=vpc)
         sg.add_ingress_rule(ec2.Peer.any_ipv4(), ec2.Port.tcp(22), "Allow SSH")
 
-        # Find latest Ubuntu 22.04 LTS AMI
-        selector = environment_spec.default_ami_selector
-        ubuntu_ami = ec2.MachineImage.lookup(
-            name=selector.name,
-            owners=[selector.owner],
-            filters={key: list(value) for key, value in selector.filters.items()},
+        # Reason: preserve ``ami_id_override`` compatibility while supporting the
+        # new ``ami_source``/``selected_ami_id`` API.
+        effective_ami_source: Literal["default", "selected"]
+        effective_selected_ami_id: str | None = selected_ami_id
+        if ami_source is None:
+            if ami_id_override and ami_id_override.strip():
+                effective_ami_source = "selected"
+                effective_selected_ami_id = ami_id_override.strip()
+            else:
+                effective_ami_source = "default"
+        else:
+            effective_ami_source = ami_source
+            if (
+                effective_ami_source == "selected"
+                and ami_id_override
+                and ami_id_override.strip()
+            ):
+                override_ami_id = ami_id_override.strip()
+                if effective_ami_source == "selected":
+                    if (
+                        effective_selected_ami_id
+                        and effective_selected_ami_id.strip()
+                        and effective_selected_ami_id.strip() != override_ami_id
+                    ):
+                        raise ValueError("ami_id_override conflicts with selected_ami_id")
+                    if not effective_selected_ami_id or not effective_selected_ami_id.strip():
+                        effective_selected_ami_id = override_ami_id
+
+        ami_id = resolve_ami_id(
+            stack=self,
+            environment_spec=environment_spec,
+            ami_source=effective_ami_source,
+            selected_ami_id=effective_selected_ami_id,
         )
 
-        ami_id = ubuntu_ami.get_image(self).image_id
-
-        # User data script to install required tools and set up VNC
-        user_data_script = ""
-        for filename in environment_spec.bootstrap_files:
-            script_path = Path("init") / filename
-            user_data_script += script_path.read_text(encoding="utf-8")
-
-        user_data_base64 = base64.b64encode(user_data_script.encode("utf-8")).decode("utf-8")
+        should_include_bootstrap = (
+            effective_ami_source == "default"
+            or (
+                effective_ami_source == "selected"
+                and bootstrap_on_restored_ami
+            )
+        )
+        launch_specification = build_spot_fleet_launch_specification(
+            ami_id=ami_id,
+            instance_type=environment_spec.instance_type,
+            security_group_id=sg.security_group_id,
+            subnet_id=local_zone_subnet.ref,
+            volume_size=environment_spec.volume_size,
+            include_bootstrap_user_data=should_include_bootstrap,
+            bootstrap_files=environment_spec.bootstrap_files,
+        )
 
         # Spot Fleet Request
         ec2.CfnSpotFleet(self, environment_spec.spot_fleet_logical_id,
@@ -116,25 +145,7 @@ class BuilderWorkstationStack(Stack):
                 target_capacity=1,
                 spot_price=environment_spec.spot_price,
                 launch_specifications=[
-                    ec2.CfnSpotFleet.SpotFleetLaunchSpecificationProperty(
-                        image_id=ami_id,
-                        instance_type=environment_spec.instance_type,
-                        key_name="aws_key",
-                        security_groups=[{"groupId": sg.security_group_id}],
-                        subnet_id=local_zone_subnet.ref,
-                        user_data=user_data_base64,
-                        block_device_mappings=[
-                            {
-                                "deviceName": "/dev/sda1",  # Typical root device for Ubuntu AMIs
-                                "ebs": {
-                                    "deleteOnTermination": True,
-                                    "volumeSize": environment_spec.volume_size,
-                                    "volumeType": "gp3",     # Use gp3 for best price/performance
-                                    "encrypted": False       # Set to True if encryption is required
-                                }
-                            }
-                        ]
-                    )
+                    ec2.CfnSpotFleet.SpotFleetLaunchSpecificationProperty(**launch_specification)
                 ]
             )
         )

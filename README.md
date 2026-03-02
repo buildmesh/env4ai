@@ -4,6 +4,7 @@ This repository helps developers spin up reproducible EC2 workstations for AI to
 
 Current environment:
 - `gastown`: [Gas Town](https://github.com/steveyegge/gastown), preconfigured with dependencies so it is usable out of the box.
+- `builder`: Android-focused builder workstation profile.
 
 ## Prerequisites
 
@@ -118,6 +119,28 @@ This destroys the deployed stack and stops billing for the workstation resources
 Save-on-stop note:
 - Set `AMI_SAVE=1 AMI_TAG=<tag>` to save and wait for AMI `<environment>_<tag>` before destroy.
 - Without `AMI_SAVE`, stop behavior remains a direct destroy.
+
+### Start `builder` environment
+
+```bash
+make builder
+```
+
+Optional AMI controls (`AMI_LOAD`, `AMI_LIST`, `AMI_PICK`, `AMI_BOOTSTRAP`) and
+save-on-stop controls (`AMI_SAVE`, `AMI_TAG`) work with `builder` the same way as
+`gastown`, using AMI names like `builder_20260301`.
+
+### Stop/destroy `builder` environment
+
+```bash
+make builder ACTION=STOP
+```
+
+To save before destroy:
+
+```bash
+AMI_SAVE=1 AMI_TAG=20260302 make builder ACTION=STOP
+```
 
 ### Enter the tooling container
 

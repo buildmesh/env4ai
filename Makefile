@@ -6,9 +6,9 @@ aws:
 	docker compose run --rm aws /bin/bash
 builder:
 ifeq ($(ACTION),START)
-	docker compose run --rm aws bash -lc "cd builder && uv run cdk deploy --require-approval never && uv run ../scripts/check_instance.py"
+	docker compose run --rm aws bash -lc "cd /home/user && uv run scripts/deploy_workstation.py --environment builder --stack-dir /home/user/builder --stack-name BuilderWorkstationStack"
 else ifeq ($(ACTION),STOP)
-	docker compose run --rm aws bash -lc "cd builder && uv run cdk destroy --force"
+	docker compose run --rm aws bash -lc "cd /home/user && uv run scripts/stop_workstation.py --environment builder --stack-dir /home/user/builder --stack-name BuilderWorkstationStack"
 else
 	@echo "Invalid ACTION=$(ACTION)"
 endif
