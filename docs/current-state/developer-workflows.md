@@ -69,8 +69,8 @@ Use these steps to add a new environment with minimal copy/paste and no hardcode
    - App passes `ENVIRONMENT_SPEC` into the stack constructor.
    - Stack uses `environment_spec.construct_id(...)` and shared helpers from `workstation_core.cdk_helpers`.
 4. Wire `Makefile` start/stop entrypoints through shared scripts:
-   - Start: `uv run scripts/deploy_workstation.py --environment <environment> --stack-dir /home/user/<environment> --stack-name <DisplayName>WorkstationStack`
-   - Stop: `uv run scripts/stop_workstation.py --environment <environment> --stack-dir /home/user/<environment> --stack-name <DisplayName>WorkstationStack`
+   - Start: `cd /home/user/<environment> && uv run ../scripts/deploy_workstation.py --environment <environment> --stack-dir /home/user/<environment> --stack-name <DisplayName>WorkstationStack`
+   - Stop: `cd /home/user/<environment> && uv run ../scripts/stop_workstation.py --environment <environment> --stack-dir /home/user/<environment> --stack-name <DisplayName>WorkstationStack`
 5. Validate required command behaviors for the new environment:
    - AMI list: `AMI_LIST=1 make <environment>`
    - AMI load: `AMI_LOAD=20260301 make <environment>`
