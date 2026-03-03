@@ -182,6 +182,7 @@ def list_environment_images(ec2_client: BaseClient, environment: str) -> list[di
             {
                 "image_id": str(image.get("ImageId", "")),
                 "name": str(image.get("Name", "")),
+                "arn": str(image.get("ImageArn", "")),
                 "state": str(image.get("State", "unknown")),
                 "creation_date": str(image.get("CreationDate", "")),
             }
@@ -234,10 +235,48 @@ def print_image_list(images: Sequence[dict[str, str]], out: TextIO = sys.stdout)
         return
     out.write("Available AMIs:\n")
     for index, image in enumerate(images, start=1):
-        out.write(
-            f"{index}. {image['name']} ({image['image_id']}) "
-            f"state={image['state']} created={image['creation_date']}\n"
-        )
+        state = str(image.get("state", "unknown")).strip().lower()
+        disabled_suffix = ""
+        if state in {"pending", "failed"}:
+            disabled_suffix = f" [disabled: state={state}]"
+        out.write(f"{index}. {image['name']} created={image['creation_date']}{disabled_suffix}\n")
+
+
+def _is_deployable_image(image: Mapping[str, str]) -> bool:
+    """Return whether an AMI record is deployable for interactive selection."""
+    return str(image.get("state", "")).strip().lower() == "available"
+
+
+def _confirm_selected_image(
+    image: Mapping[str, str],
+    *,
+    input_func: Callable[[str], str],
+    out: TextIO,
+) -> bool:
+    """Render selected AMI detail view and require explicit confirmation.
+
+    Args:
+        image: Selected AMI metadata.
+        input_func: Input provider.
+        out: Output stream.
+
+    Returns:
+        ``True`` when deploy should continue.
+    """
+    arn = str(image.get("arn", "")).strip() or "N/A"
+    out.write(
+        "Selected AMI details:\n"
+        f"  name: {image.get('name', '')}\n"
+        f"  image_id: {image.get('image_id', '')}\n"
+        f"  arn: {arn}\n"
+        f"  state: {image.get('state', 'unknown')}\n"
+        f"  creation_date: {image.get('creation_date', '')}\n"
+    )
+    confirmation = input_func("Type 'yes' to continue deploy (anything else cancels): ").strip()
+    if confirmation == "yes":
+        return True
+    out.write("AMI deploy canceled.\n")
+    return False
 
 
 def pick_image_interactively(
@@ -272,7 +311,16 @@ def pick_image_interactively(
         if index < 1 or index > len(images):
             out.write("Selection out of range. Try again.\n")
             continue
-        return images[index - 1]
+        selected = images[index - 1]
+        # Reason: pending/failed AMIs are shown for context but must not be selectable.
+        if not _is_deployable_image(selected):
+            state = str(selected.get("state", "unknown")).strip().lower() or "unknown"
+            out.write(
+                f"Selected AMI is not deployable (state={state}). "
+                "Choose an AMI with state=available.\n"
+            )
+            continue
+        return selected
 
 
 def resolve_ami_selection(
@@ -316,6 +364,8 @@ def resolve_ami_selection(
         if not mode.ami_pick:
             return AmiSelectionResult(selected_ami_id=None, should_deploy=False)
         selected_image = pick_image_interactively(images, input_func=input_func, out=out)
+        if not _confirm_selected_image(selected_image, input_func=input_func, out=out):
+            return AmiSelectionResult(selected_ami_id=None, should_deploy=False)
         out.write(
             f"Selected AMI {selected_image['name']} "
             f"({selected_image['image_id']}) for deploy.\n"
