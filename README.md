@@ -183,8 +183,8 @@ Use `aws/workstation_core` as the single source of truth and only keep environme
    - Spot Fleet logical id: `ENVIRONMENT_SPEC.spot_fleet_logical_id`
    - Saved AMI prefix: `ENVIRONMENT_SPEC.ami_prefix` (`<environment>_`)
 4. Wire the target in `Makefile` using the shared scripts pattern used by `gastown`:
-   - Start/deploy: `uv run scripts/deploy_workstation.py --environment <env> --stack-dir /home/user/<env> --stack-name <DisplayName>WorkstationStack`
-   - Stop/destroy: `uv run scripts/stop_workstation.py --environment <env> --stack-dir /home/user/<env> --stack-name <DisplayName>WorkstationStack`
+   - Start/deploy: `cd /home/user/<env> && uv run ../scripts/deploy_workstation.py --environment <env> --stack-dir /home/user/<env> --stack-name <DisplayName>WorkstationStack`
+   - Stop/destroy: `cd /home/user/<env> && uv run ../scripts/stop_workstation.py --environment <env> --stack-dir /home/user/<env> --stack-name <DisplayName>WorkstationStack`
 5. Validate AMI lifecycle behavior for the new environment:
    - List only: `AMI_LIST=1 make <env>`
    - Load exact AMI name: `AMI_LOAD=20260301 make <env>` (resolves `<env>_20260301`)
