@@ -38,23 +38,44 @@ Current environment:
 
 ## Usage
 
-### Start `gastown` environment
+### Interactive-first workflow (default)
 
 ```bash
+make
+```
+
+`make` now opens the interactive workstation lifecycle menu (`make interactive`).
+The environment picker is auto-discovered from valid environment modules under
+`aws/` (directories with `environment_config.py` that expose `ENVIRONMENT_SPEC`).
+
+Interactive menu actions:
+- Deploy with default AMI
+- Deploy with AMI list + pick
+- Save current state as AMI
+- Destroy stack
+- Destroy stack + save AMI first
+- Refresh status
+- Switch environment
+- Quit
+
+Note: AWS creates `aws-ec2-spot-fleet-tagging-role` automatically the first time
+Spot Fleet needs it.
+
+### Advanced / compatibility commands
+
+Existing explicit targets remain available for automation and backwards compatibility:
+
+```bash
+# Deploy/start one environment directly
 make gastown
+make builder
+
+# Destroy one environment directly
+make gastown ACTION=STOP
+make builder ACTION=STOP
 ```
 
-This deploys the CDK stack, creates/starts the EC2 workstation, and prints SSH config instructions.
-
-After applying the SSH config update instructions, run:
-
-```bash
-ssh gastown-workstation
-```
-
-Note: AWS creates `aws-ec2-spot-fleet-tagging-role` automatically the first time Spot Fleet needs it.
-
-Optional AMI lifecycle controls are available through environment variables:
+Optional AMI lifecycle controls remain available for direct target usage:
 
 ```bash
 # Deploy using an exact AMI name: gastown_20260301
@@ -70,7 +91,7 @@ AMI_LIST=1 make gastown
 AMI_LIST=1 AMI_PICK=1 make gastown
 ```
 
-Behavior:
+Advanced behavior notes:
 - `AMI_LOAD=<tag>` resolves AMI name `<environment>_<tag>` exactly and deploys with that AMI ID.
 - `AMI_BOOTSTRAP=1` runs bootstrap userData even when deploying from a saved AMI (default is skip for restored AMIs).
 - If requested AMI is missing, deploy fails before Spot request creation.
@@ -108,44 +129,10 @@ unset AMI_LOAD AMI_LIST AMI_PICK
   - Deploy: `make gastown`
   - Stop: `make gastown ACTION=STOP`
 
-### Stop/destroy `gastown` environment
-
-```bash
-make gastown ACTION=STOP
-```
-
-This destroys the deployed stack and stops billing for the workstation resources.
-
-Save-on-stop note:
-- Set `AMI_SAVE=1 AMI_TAG=<tag>` to save and wait for AMI `<environment>_<tag>` before destroy.
-- Without `AMI_SAVE`, stop behavior remains a direct destroy.
-
-### Start `builder` environment
-
-```bash
-make builder
-```
-
-Optional AMI controls (`AMI_LOAD`, `AMI_LIST`, `AMI_PICK`, `AMI_BOOTSTRAP`) and
-save-on-stop controls (`AMI_SAVE`, `AMI_TAG`) work with `builder` the same way as
-`gastown`, using AMI names like `builder_20260301`.
-
-### Stop/destroy `builder` environment
-
-```bash
-make builder ACTION=STOP
-```
-
-To save before destroy:
-
-```bash
-AMI_SAVE=1 AMI_TAG=20260302 make builder ACTION=STOP
-```
-
 ### Enter the tooling container
 
 ```bash
-make
+make aws
 ```
 
 This opens a shell inside the Docker container with AWS/CDK tooling.

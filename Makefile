@@ -1,4 +1,5 @@
 ACTION := START
+.DEFAULT_GOAL := interactive
 DOCKER_COMPOSE_RUN := docker compose run --rm \
 	-e AWS_PROFILE \
 	-e AWS_REGION \
@@ -12,7 +13,10 @@ DOCKER_COMPOSE_RUN := docker compose run --rm \
 	-e AMI_SAVE \
 	-e AMI_TAG
 
-.PHONY: aws
+.PHONY: interactive aws
+
+interactive:
+	$(DOCKER_COMPOSE_RUN) aws bash -lc "cd /home/user/gastown && uv run ../scripts/interactive_workstation.py"
 
 aws:
 	$(DOCKER_COMPOSE_RUN) aws /bin/bash

@@ -60,6 +60,18 @@ from workstation_core.runtime_resolution import (
     parse_optional_bool_context,
     parse_optional_text_context,
 )
+from workstation_core.interactive_workstation import (
+    ActionResult,
+    EnvironmentTarget,
+    choose_environment,
+    discover_environments,
+    dispatch_action,
+    load_last_used_environment_key,
+    parse_action_choice,
+    run_script,
+    save_last_used_environment_key,
+)
+from workstation_core.workstation_status import WorkstationStatus, get_workstation_status
 
 __all__ = [
     "AmiSelectorConfig",
@@ -108,4 +120,15 @@ __all__ = [
     "load_aws_config",
     "parse_optional_bool_context",
     "parse_optional_text_context",
+    "ActionResult",
+    "EnvironmentTarget",
+    "choose_environment",
+    "discover_environments",
+    "dispatch_action",
+    "load_last_used_environment_key",
+    "parse_action_choice",
+    "run_script",
+    "save_last_used_environment_key",
+    "WorkstationStatus",
+    "get_workstation_status",
 ]
