@@ -44,6 +44,39 @@ class ActionResult:
     should_quit: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class InteractiveEnvironmentState:
+    """Runtime state used to gate interactive actions.
+
+    Args:
+        stack_state: High-level stack state shown in the interactive UI.
+        stack_status: Raw CloudFormation stack status, when available.
+        is_deployed: Whether stack exists and is not terminally deleted.
+    """
+
+    stack_state: str
+    stack_status: str | None
+    is_deployed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ActionAvailability:
+    """Availability information for one action menu entry.
+
+    Args:
+        enabled: Whether the action can execute right now.
+        disabled_reason: User-facing reason when action is disabled.
+    """
+
+    enabled: bool
+    disabled_reason: str | None = None
+
+
+DEPLOY_DISABLED_REASON = "Unavailable: stack is already deployed."
+REQUIRES_DEPLOYED_REASON = "Unavailable: deploy the stack first."
+TERMINAL_DELETED_STACK_STATUSES: frozenset[str] = frozenset({"DELETE_COMPLETE"})
+
+
 def _load_environment_spec(directory: Path) -> object | None:
     """Load ``ENVIRONMENT_SPEC`` from an environment directory when available."""
     module_path = directory / "environment_config.py"
@@ -269,6 +302,62 @@ def parse_action_choice(input_value: str) -> str | None:
     return mapping.get(normalized)
 
 
+def derive_is_deployed(*, stack_state: str, stack_status: str | None) -> bool:
+    """Derive deployment state from workstation stack metadata.
+
+    Args:
+        stack_state: High-level stack state from status helper.
+        stack_status: Raw CloudFormation stack status.
+
+    Returns:
+        ``True`` when stack exists and is not terminally deleted.
+    """
+    if stack_state.strip().lower() == "not found":
+        return False
+    normalized_status = (stack_status or "").strip().upper()
+    return normalized_status not in TERMINAL_DELETED_STACK_STATUSES
+
+
+def build_action_availability(
+    state: InteractiveEnvironmentState,
+) -> dict[str, ActionAvailability]:
+    """Compute action availability for one interactive render/execute cycle.
+
+    Args:
+        state: Derived environment state for policy checks.
+
+    Returns:
+        Mapping of canonical action key -> availability metadata.
+    """
+    deploy_enabled = not state.is_deployed
+    requires_deployed_enabled = state.is_deployed
+    return {
+        "deploy_default": ActionAvailability(
+            enabled=deploy_enabled,
+            disabled_reason=None if deploy_enabled else DEPLOY_DISABLED_REASON,
+        ),
+        "deploy_pick_ami": ActionAvailability(
+            enabled=deploy_enabled,
+            disabled_reason=None if deploy_enabled else DEPLOY_DISABLED_REASON,
+        ),
+        "save_ami_only": ActionAvailability(
+            enabled=requires_deployed_enabled,
+            disabled_reason=None if requires_deployed_enabled else REQUIRES_DEPLOYED_REASON,
+        ),
+        "destroy": ActionAvailability(
+            enabled=requires_deployed_enabled,
+            disabled_reason=None if requires_deployed_enabled else REQUIRES_DEPLOYED_REASON,
+        ),
+        "destroy_and_save": ActionAvailability(
+            enabled=requires_deployed_enabled,
+            disabled_reason=None if requires_deployed_enabled else REQUIRES_DEPLOYED_REASON,
+        ),
+        "refresh": ActionAvailability(enabled=True),
+        "switch_environment": ActionAvailability(enabled=True),
+        "quit": ActionAvailability(enabled=True),
+    }
+
+
 def run_script(
     command: list[str],
     *,
@@ -296,6 +385,31 @@ def _prompt_ami_tag(*, input_func: Callable[[str], str], out: TextIO) -> str:
         if value:
             return value
         out.write("AMI tag is required.\n")
+
+
+def _confirm_exact_yes(
+    *,
+    prompt: str,
+    cancellation_message: str,
+    input_func: Callable[[str], str],
+    out: TextIO,
+) -> bool:
+    """Require an exact ``yes`` confirmation for destructive actions.
+
+    Args:
+        prompt: Prompt text that asks for confirmation.
+        cancellation_message: Message shown when user does not type ``yes``.
+        input_func: Input callback.
+        out: Output stream.
+
+    Returns:
+        ``True`` when user typed exact ``yes``.
+    """
+    response = input_func(prompt).strip()
+    if response == "yes":
+        return True
+    out.write(f"{cancellation_message}\n")
+    return False
 
 
 def dispatch_action(
@@ -379,11 +493,31 @@ def dispatch_action(
         return ActionResult()
 
     if action == "destroy":
+        if not _confirm_exact_yes(
+            prompt="Type 'yes' to destroy stack: ",
+            cancellation_message="Destroy canceled.",
+            input_func=input_func,
+            out=out,
+        ):
+            return ActionResult()
         runner(stop_command, environment.stack_dir, None)
         return ActionResult()
 
     if action == "destroy_and_save":
         ami_tag = _prompt_ami_tag(input_func=input_func, out=out)
+        out.write(
+            "Destroy + save summary:\n"
+            f"  environment: {environment.environment_key}\n"
+            f"  ami_tag: {ami_tag}\n"
+            "  action: save AMI, then destroy stack\n"
+        )
+        if not _confirm_exact_yes(
+            prompt="Type 'yes' to continue: ",
+            cancellation_message="Destroy + save canceled.",
+            input_func=input_func,
+            out=out,
+        ):
+            return ActionResult()
         runner(stop_command, environment.stack_dir, {"AMI_SAVE": "1", "AMI_TAG": ami_tag})
         return ActionResult()
 

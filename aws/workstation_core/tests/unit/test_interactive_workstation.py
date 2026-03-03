@@ -9,7 +9,10 @@ import unittest
 
 from workstation_core.interactive_workstation import (
     EnvironmentTarget,
+    InteractiveEnvironmentState,
+    build_action_availability,
     choose_environment,
+    derive_is_deployed,
     discover_environments,
     dispatch_action,
     parse_action_choice,
@@ -164,6 +167,81 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
         self.assertEqual(None, calls[0][2])
         self.assertIn("../scripts/deploy_workstation.py", calls[0][0])
 
+    def test_build_action_availability_disables_deploy_actions_when_deployed(self) -> None:
+        """Expected: deployed state disables deploy actions with a reason."""
+        availability = build_action_availability(
+            InteractiveEnvironmentState(
+                stack_state="running",
+                stack_status="CREATE_COMPLETE",
+                is_deployed=True,
+            )
+        )
+
+        self.assertFalse(availability["deploy_default"].enabled)
+        self.assertFalse(availability["deploy_pick_ami"].enabled)
+        self.assertIsNotNone(availability["deploy_default"].disabled_reason)
+
+    def test_build_action_availability_disables_destroy_actions_when_not_deployed(self) -> None:
+        """Expected: not deployed state disables save/destroy actions with a reason."""
+        availability = build_action_availability(
+            InteractiveEnvironmentState(
+                stack_state="not found",
+                stack_status=None,
+                is_deployed=False,
+            )
+        )
+
+        self.assertFalse(availability["save_ami_only"].enabled)
+        self.assertFalse(availability["destroy"].enabled)
+        self.assertFalse(availability["destroy_and_save"].enabled)
+
+    def test_derive_is_deployed_false_for_not_found_stack_state(self) -> None:
+        """Edge: stack-not-found always reports not deployed."""
+        self.assertFalse(
+            derive_is_deployed(
+                stack_state="not found",
+                stack_status="CREATE_COMPLETE",
+            )
+        )
+
+    def test_dispatch_action_destroy_cancels_without_confirmation(self) -> None:
+        """Failure: destroy action does not invoke backend unless input is exact yes."""
+        environment = self._targets()[0]
+        calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
+        output = io.StringIO()
+        result = dispatch_action(
+            "destroy",
+            environment,
+            input_func=lambda _: "no",
+            out=output,
+            runner=lambda command, cwd, env_overrides: calls.append((command, cwd, env_overrides)),
+        )
+        self.assertFalse(result.switch_environment)
+        self.assertFalse(result.should_quit)
+        self.assertEqual([], calls)
+        self.assertIn("Destroy canceled.", output.getvalue())
+
+    def test_dispatch_action_destroy_and_save_requires_non_empty_tag_and_yes(self) -> None:
+        """Expected: destroy+save retries empty tag and runs only after exact yes confirm."""
+        environment = self._targets()[0]
+        calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
+        output = io.StringIO()
+        inputs = iter(["   ", "snapshot-20260303", "yes"])
+
+        result = dispatch_action(
+            "destroy_and_save",
+            environment,
+            input_func=lambda _prompt: next(inputs),
+            out=output,
+            runner=lambda command, cwd, env_overrides: calls.append((command, cwd, env_overrides)),
+        )
+
+        self.assertFalse(result.switch_environment)
+        self.assertFalse(result.should_quit)
+        self.assertEqual(1, len(calls))
+        self.assertEqual({"AMI_SAVE": "1", "AMI_TAG": "snapshot-20260303"}, calls[0][2])
+        self.assertIn("AMI tag is required.", output.getvalue())
+
     def test_dispatch_action_switch_environment_returns_switch_signal(self) -> None:
         """Edge: switch action returns control to environment picker without commands."""
         environment = self._targets()[0]
@@ -186,7 +264,7 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
             dispatch_action(
                 "destroy",
                 environment,
-                input_func=lambda _: "",
+                input_func=lambda _: "yes",
                 out=io.StringIO(),
                 runner=lambda _command, _cwd, _env: (_ for _ in ()).throw(RuntimeError("backend boom")),
             )

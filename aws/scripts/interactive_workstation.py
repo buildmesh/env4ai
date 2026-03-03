@@ -18,8 +18,12 @@ if str(AWS_ROOT) not in sys.path:
 
 from workstation_core.interactive_workstation import (
     ActionResult,
+    ActionAvailability,
     EnvironmentTarget,
+    InteractiveEnvironmentState,
+    build_action_availability,
     choose_environment,
+    derive_is_deployed,
     discover_environments,
     dispatch_action,
     load_last_used_environment_key,
@@ -92,17 +96,38 @@ def _render_status(environment: EnvironmentTarget, status: WorkstationStatus) ->
             print(f"  SSH alias: {status.ssh_alias}")
 
 
-def _show_action_menu() -> None:
-    """Print available action options."""
+def _show_gated_action_menu(availability: dict[str, ActionAvailability]) -> None:
+    """Print action options with disabled reasons when policy blocks execution."""
+    menu_items = [
+        ("1", "deploy_default", "Deploy with default AMI"),
+        ("2", "deploy_pick_ami", "Deploy with AMI list + pick"),
+        ("3", "save_ami_only", "Save current state as AMI"),
+        ("4", "destroy", "Destroy stack"),
+        ("5", "destroy_and_save", "Destroy stack + save AMI first"),
+        ("6", "refresh", "Refresh status"),
+        ("7", "switch_environment", "Switch environment"),
+        ("8", "quit", "Quit"),
+    ]
+
     print("\nActions:")
-    print("  1. Deploy with default AMI")
-    print("  2. Deploy with AMI list + pick")
-    print("  3. Save current state as AMI")
-    print("  4. Destroy stack")
-    print("  5. Destroy stack + save AMI first")
-    print("  6. Refresh status")
-    print("  7. Switch environment")
-    print("  8. Quit")
+    for number, action, label in menu_items:
+        entry = availability[action]
+        if entry.enabled:
+            print(f"  {number}. {label}")
+            continue
+        print(f"  {number}. {label} [{entry.disabled_reason}]")
+
+
+def _build_environment_state(status: WorkstationStatus) -> InteractiveEnvironmentState:
+    """Build a deterministic state snapshot used by action gating policy."""
+    return InteractiveEnvironmentState(
+        stack_state=status.stack_state,
+        stack_status=status.stack_status,
+        is_deployed=derive_is_deployed(
+            stack_state=status.stack_state,
+            stack_status=status.stack_status,
+        ),
+    )
 
 
 def _run_action_loop(
@@ -121,10 +146,31 @@ def _run_action_loop(
             ssh_alias=environment.ssh_alias,
         )
         _render_status(environment, status)
-        _show_action_menu()
+        current_state = _build_environment_state(status)
+        current_availability = build_action_availability(current_state)
+        _show_gated_action_menu(current_availability)
         choice = parse_action_choice(input("Choose action (1-8): "))
         if choice is None:
             print("Invalid selection. Enter 1-8, or q to quit.")
+            continue
+        if not current_availability[choice].enabled:
+            print(current_availability[choice].disabled_reason or "Action is unavailable.")
+            continue
+
+        rechecked_status = get_workstation_status(
+            cloudformation_client,
+            ec2_client,
+            stack_name=environment.stack_name,
+            spot_fleet_logical_id=environment.spot_fleet_logical_id,
+            ssh_alias=environment.ssh_alias,
+        )
+        rechecked_state = _build_environment_state(rechecked_status)
+        rechecked_availability = build_action_availability(rechecked_state)
+        if not rechecked_availability[choice].enabled:
+            print(
+                rechecked_availability[choice].disabled_reason
+                or "Action is unavailable because state changed."
+            )
             continue
         try:
             result = dispatch_action(
