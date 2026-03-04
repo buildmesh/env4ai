@@ -2,7 +2,8 @@
 
 This repository helps developers spin up reproducible EC2 workstations for AI tooling.
 
-Current environment:
+## Available Environments
+
 - `gastown`: [Gas Town](https://github.com/steveyegge/gastown), preconfigured with dependencies so it is usable out of the box.
 - `builder`: Android-focused builder workstation profile.
 
@@ -38,119 +39,81 @@ Current environment:
 
 ## Usage
 
-### Interactive-first workflow (default)
+Run `make` to open the interactive workstation lifecycle menu. The menu auto-discovers available environments from modules under `aws/`.
+
+### Interactive Menu
+
+| Action | What it does |
+|--------|--------------|
+| **Deploy with default AMI** | Provisions a new EC2 workstation using the environment's standard base image |
+| **Deploy with AMI list + pick** | Lists your saved AMIs for this environment, lets you choose one, then deploys |
+| **Save current state as AMI** | Snapshots your running workstation to a named AMI for later restore |
+| **Destroy stack** | Tears down the running workstation and all associated resources |
+| **Destroy stack + save AMI first** | Saves an AMI snapshot, then destroys — preserves state before shutting down |
+| **Refresh status** | Re-checks live stack status from AWS |
+| **Switch environment** | Changes the active environment (e.g. from `gastown` to `builder`) |
+| **Quit** | Exits the menu |
+
+AMI names use the format `<environment>_<tag>` (for example `gastown_20260301`). Menu actions are gated by current stack state — deploy is disabled when a stack is already running, and save/destroy are disabled when no stack exists. Destructive actions require explicit confirmation.
+
+> **Note:** AWS creates `aws-ec2-spot-fleet-tagging-role` automatically the first time Spot Fleet needs it.
+
+---
+
+## Advanced: Non-Interactive Workflows
+
+The `make` targets and environment variables below provide the same operations as the interactive menu — useful for scripting or when you prefer to skip the menu.
+
+### Direct targets
 
 ```bash
-make
-```
-
-`make` now opens the interactive workstation lifecycle menu (`make interactive`).
-The environment picker is auto-discovered from valid environment modules under
-`aws/` (directories with `environment_config.py` that expose `ENVIRONMENT_SPEC`).
-
-Interactive menu actions:
-- Deploy with default AMI
-- Deploy with AMI list + pick
-- Save current state as AMI
-- Destroy stack
-- Destroy stack + save AMI first
-- Refresh status
-- Switch environment
-- Quit
-
-Interactive safety behavior:
-- Actions are state-gated from live stack status:
-  - Deploy actions are disabled when stack is already deployed.
-  - Save/destroy actions are disabled when no stack is deployed.
-- Disabled actions stay visible with a reason and keep stable numbering.
-- Action policy is re-checked immediately before execution to guard against state drift.
-- Destroy requires typing exact `yes`.
-- Destroy + save requires a non-empty AMI tag, then exact `yes`.
-
-Note: AWS creates `aws-ec2-spot-fleet-tagging-role` automatically the first time
-Spot Fleet needs it.
-
-### Advanced / compatibility commands
-
-Existing explicit targets remain available for automation and backwards compatibility:
-
-```bash
-# Deploy/start one environment directly
+# Deploy
 make gastown
 make builder
 
-# Destroy one environment directly
+# Destroy
 make gastown ACTION=STOP
 make builder ACTION=STOP
 ```
 
-Optional AMI lifecycle controls remain available for direct target usage:
+### AMI lifecycle
+
+| Interactive step | Equivalent command |
+|-----------------|--------------------|
+| Deploy with default AMI | `make gastown` |
+| Deploy from a specific saved AMI | `AMI_LOAD=20260301 make gastown` |
+| Deploy with AMI list + pick | `AMI_LIST=1 AMI_PICK=1 make gastown` |
+| List saved AMIs only (no deploy) | `AMI_LIST=1 make gastown` |
+| Destroy stack + save AMI first | `AMI_SAVE=1 AMI_TAG=20260302 make gastown ACTION=STOP` |
+
+Run bootstrap scripts even when deploying from a saved AMI:
 
 ```bash
-# Deploy using an exact AMI name: gastown_20260301
-AMI_LOAD=20260301 make gastown
-
-# Deploy from saved AMI and force bootstrap scripts to run again
 AMI_LOAD=20260301 AMI_BOOTSTRAP=1 make gastown
-
-# List AMIs matching gastown_* and exit without deploy
-AMI_LIST=1 make gastown
-
-# List AMIs and choose one interactively, then deploy
-AMI_LIST=1 AMI_PICK=1 make gastown
 ```
 
-Advanced behavior notes:
-- `AMI_LOAD=<tag>` resolves AMI name `<environment>_<tag>` exactly and deploys with that AMI ID.
-- `AMI_BOOTSTRAP=1` runs bootstrap userData even when deploying from a saved AMI (default is skip for restored AMIs).
-- If requested AMI is missing, deploy fails before Spot request creation.
-- `AMI_LIST=1` shows environment-scoped AMIs with ID/state/creation date for operator choice.
-- Interactive AMI list renders only `name` + `creation_date` for scanning, while
-  `pending` and `failed` AMIs remain visible but disabled.
-- `AMI_PICK=1` is only valid with `AMI_LIST=1`; invalid combinations fail fast.
+**Behavior notes:**
 - `AMI_LOAD` and `AMI_LIST` are mutually exclusive; invalid combinations fail fast.
-- AMI list/load modes run an IAM preflight before deploy mutation steps and fail early with remediation if `ec2:DescribeImages` is missing.
-- Without AMI options, deploy behavior remains unchanged and uses the default Ubuntu base image.
-
-AMI naming convention and states:
-- Use AMI names in the format `<environment>_<tag>` (for example `gastown_20260301`).
-- Listed states come from EC2 image state (for example `pending`, `available`, `failed`).
-- Deploy from a listed AMI should use an `available` image; `pending` images are still creating and may fail to launch.
-- In interactive pick mode, only `available` AMIs are selectable; selecting `pending`/`failed`
-  rows is rejected with a re-prompt.
-- After choosing an AMI, a detail confirmation view shows `name`, `image_id`, `arn` (or `N/A`),
-  `state`, and `creation_date`; deploy continues only after exact `yes`.
-
-Save-on-stop workflow:
-- `AMI_SAVE=1` with `AMI_TAG=<tag>` saves AMI `<environment>_<tag>` from the current running workstation instance before destroy.
+- `AMI_PICK=1` is only valid with `AMI_LIST=1`.
+- AMI list/load modes run an IAM preflight and fail early with remediation if `ec2:DescribeImages` is missing.
+- If the requested AMI is missing, deploy fails before the Spot request is created.
 - If AMI creation fails or does not become `available` before timeout, destroy is aborted.
 
-```bash
-# Save current workstation as AMI gastown_20260302, then destroy stack
-AMI_SAVE=1 AMI_TAG=20260302 make gastown ACTION=STOP
-
-# Default stop behavior is unchanged when AMI_SAVE is not set
-make gastown ACTION=STOP
-```
-
-Rollback to legacy behavior:
-- Remove AMI lifecycle env vars from your shell/session:
+To clear AMI flags and return to default behavior:
 
 ```bash
-unset AMI_LOAD AMI_LIST AMI_PICK
+unset AMI_LOAD AMI_LIST AMI_PICK AMI_SAVE AMI_TAG
 ```
-
-- Use the original commands:
-  - Deploy: `make gastown`
-  - Stop: `make gastown ACTION=STOP`
 
 ### Enter the tooling container
+
+To open a shell inside the Docker container with AWS/CDK tooling directly:
 
 ```bash
 make aws
 ```
 
-This opens a shell inside the Docker container with AWS/CDK tooling.
+---
 
 ## Notes
 
@@ -197,9 +160,3 @@ Use `aws/workstation_core` as the single source of truth and only keep environme
 IAM note:
 - AMI list/load flows require `ec2:DescribeImages`.
 - Save-on-stop requires permissions used by `create_image` and AMI state checks in `aws/workstation_core/ami_lifecycle.py`.
-
-Rollback path:
-- Unset AMI flags and run normal commands:
-  - `unset AMI_LOAD AMI_LIST AMI_PICK AMI_SAVE AMI_TAG`
-  - `make <env>`
-  - `make <env> ACTION=STOP`
