@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import aws_cdk as cdk
 
-from environment_config import GASTOWN_ENVIRONMENT_SPEC
-from gastown_workstation.gastown_workstation_stack import GastownWorkstationStack
+from environment_config import ENVIRONMENT_SPEC
+from workstation.workstation_stack import WorkstationStack
 from workstation_core.runtime_resolution import (
     get_account,
     get_region,
@@ -23,12 +23,12 @@ def main() -> None:
             context_key="bootstrap_on_restored_ami",
         )
 
-    GastownWorkstationStack(
+    WorkstationStack(
         app,
-        GASTOWN_ENVIRONMENT_SPEC.stack_name,
+        ENVIRONMENT_SPEC.stack_name,
         ami_id_override=ami_id_override,
         bootstrap_on_restored_ami=bootstrap_on_restored_ami,
-        environment_spec=GASTOWN_ENVIRONMENT_SPEC,
+        environment_spec=ENVIRONMENT_SPEC,
         env=cdk.Environment(account=get_account(), region=get_region()),
     )
     app.synth()

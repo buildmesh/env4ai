@@ -7,7 +7,7 @@ from aws_cdk import (
 from constructs import Construct
 from typing import Literal
 
-from environment_config import GASTOWN_ENVIRONMENT_SPEC
+from environment_config import ENVIRONMENT_SPEC
 from workstation_core import EnvironmentSpec
 from workstation_core.cdk_helpers import (
     build_spot_fleet_launch_specification,
@@ -16,7 +16,7 @@ from workstation_core.cdk_helpers import (
 )
 
 
-class GastownWorkstationStack(Stack):
+class WorkstationStack(Stack):
 
     def __init__(
         self,
@@ -27,7 +27,7 @@ class GastownWorkstationStack(Stack):
         ami_source: Literal["default", "selected"] | None = None,
         selected_ami_id: str | None = None,
         bootstrap_on_restored_ami: bool = False,
-        environment_spec: EnvironmentSpec = GASTOWN_ENVIRONMENT_SPEC,
+        environment_spec: EnvironmentSpec = ENVIRONMENT_SPEC,
         **kwargs,
     ) -> None:
         """Create the workstation infrastructure stack.

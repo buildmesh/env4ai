@@ -2,7 +2,7 @@
 
 from workstation_core import AmiSelectorConfig, EnvironmentSpec, validate_environment_spec
 
-GASTOWN_ENVIRONMENT_SPEC = EnvironmentSpec(
+_ENVIRONMENT_SPEC = EnvironmentSpec(
     environment_key="gastown",
     display_name="Gastown",
     bootstrap_files=(
@@ -22,6 +22,6 @@ GASTOWN_ENVIRONMENT_SPEC = EnvironmentSpec(
     volume_size=16,
     spot_price="0.1",
 )
-validate_environment_spec(GASTOWN_ENVIRONMENT_SPEC)
+validate_environment_spec(_ENVIRONMENT_SPEC)
 
-ENVIRONMENT_SPEC = GASTOWN_ENVIRONMENT_SPEC
+ENVIRONMENT_SPEC = _ENVIRONMENT_SPEC

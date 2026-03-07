@@ -2,7 +2,7 @@
 
 from workstation_core import AmiSelectorConfig, EnvironmentSpec, validate_environment_spec
 
-BUILDER_ENVIRONMENT_SPEC = EnvironmentSpec(
+_ENVIRONMENT_SPEC = EnvironmentSpec(
     environment_key="builder",
     display_name="Builder",
     bootstrap_files=(
@@ -18,6 +18,6 @@ BUILDER_ENVIRONMENT_SPEC = EnvironmentSpec(
     volume_size=16,
     spot_price="0.1",
 )
-validate_environment_spec(BUILDER_ENVIRONMENT_SPEC)
+validate_environment_spec(_ENVIRONMENT_SPEC)
 
-ENVIRONMENT_SPEC = BUILDER_ENVIRONMENT_SPEC
+ENVIRONMENT_SPEC = _ENVIRONMENT_SPEC
