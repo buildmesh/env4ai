@@ -16,7 +16,7 @@ _ENVIRONMENT_SPEC = EnvironmentSpec(
         name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*",
         filters={"architecture": ("x86_64",)},
     ),
-    instance_type="t3.medium",
+    instance_type="t3.large",
     volume_size=30,
     spot_price="0.1",
 )
