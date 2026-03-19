@@ -231,6 +231,7 @@ def build_ssh_config_snippet(host_alias: str, ip_address: str, ssh_user: str, id
         f"  HostName {ip_address}\n"
         f"  User {ssh_user}\n"
         f"  IdentityFile {identity_file}\n"
+        f"  IdentitiesOnly yes\n"
     )
 
 
