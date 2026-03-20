@@ -9,7 +9,7 @@ log() { printf '[agents] %s\n' "$*"; }
 
 # Install Codex
 log "Installing Codex..."
-sudo -E npm i -g @openai/codex
+npm i -g @openai/codex
 
 # Install Claude Code
 log "Installing Claude Code..."

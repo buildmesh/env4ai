@@ -8,7 +8,8 @@ _ENVIRONMENT_SPEC = EnvironmentSpec(
     bootstrap_files=(
         "deps.sh",
         "python.sh",
-        "agents.sh"
+        "agents.sh",
+        "tools.sh"
     ),
     default_ami_selector=AmiSelectorConfig(
         owner="099720109477",

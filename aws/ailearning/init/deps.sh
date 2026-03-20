@@ -12,8 +12,8 @@ log() { echo "[deps] $*"; }
 # ------------------------------------------------------------
 log "Installing packages..."
 
-sudo -E apt-get update -y
-sudo -E apt-get install -y --no-install-recommends \
+apt-get update -y
+apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     gnupg \
@@ -36,12 +36,12 @@ sudo -E apt-get install -y --no-install-recommends \
 log "Installing nodejs, npm..."
 
 curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
-  | sudo gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+  | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
 echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" \
-  | sudo tee /etc/apt/sources.list.d/nodesource.list > /dev/null
+  | tee /etc/apt/sources.list.d/nodesource.list > /dev/null
 
-sudo -E apt-get update -y
-sudo -E apt-get install -y nodejs
+apt-get update -y
+apt-get install -y nodejs
 node -v
 npm -v
 
