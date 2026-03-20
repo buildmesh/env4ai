@@ -387,6 +387,20 @@ def _prompt_ami_tag(*, input_func: Callable[[str], str], out: TextIO) -> str:
         out.write("AMI tag is required.\n")
 
 
+def _prompt_yes_no(*, prompt: str, input_func: Callable[[str], str]) -> bool:
+    """Prompt for a yes/no response, defaulting to No.
+
+    Args:
+        prompt: User-facing prompt string (should include ``[y/N]`` indicator).
+        input_func: Input callback.
+
+    Returns:
+        ``True`` when user typed ``y`` or ``yes`` (case-insensitive).
+    """
+    response = input_func(prompt).strip().lower()
+    return response in ("y", "yes")
+
+
 def _confirm_exact_yes(
     *,
     prompt: str,
@@ -500,7 +514,12 @@ def dispatch_action(
             out=out,
         ):
             return ActionResult()
-        runner(stop_command, environment.stack_dir, None)
+        destroy_eip = _prompt_yes_no(
+            prompt="Also release the associated Elastic IP? [y/N]: ",
+            input_func=input_func,
+        )
+        env_overrides = {"EIP_DESTROY": "1"} if destroy_eip else None
+        runner(stop_command, environment.stack_dir, env_overrides)
         return ActionResult()
 
     if action == "destroy_and_save":
@@ -518,7 +537,14 @@ def dispatch_action(
             out=out,
         ):
             return ActionResult()
-        runner(stop_command, environment.stack_dir, {"AMI_SAVE": "1", "AMI_TAG": ami_tag})
+        destroy_eip = _prompt_yes_no(
+            prompt="Also release the associated Elastic IP? [y/N]: ",
+            input_func=input_func,
+        )
+        env_overrides: dict[str, str] = {"AMI_SAVE": "1", "AMI_TAG": ami_tag}
+        if destroy_eip:
+            env_overrides["EIP_DESTROY"] = "1"
+        runner(stop_command, environment.stack_dir, env_overrides)
         return ActionResult()
 
     if action == "refresh":

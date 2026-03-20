@@ -226,7 +226,8 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
         environment = self._targets()[0]
         calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
         output = io.StringIO()
-        inputs = iter(["   ", "snapshot-20260303", "yes"])
+        # "   " → empty tag retry; "snapshot-20260303" → valid tag; "yes" → confirm; "n" → no EIP release
+        inputs = iter(["   ", "snapshot-20260303", "yes", "n"])
 
         result = dispatch_action(
             "destroy_and_save",
@@ -241,6 +242,63 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
         self.assertEqual(1, len(calls))
         self.assertEqual({"AMI_SAVE": "1", "AMI_TAG": "snapshot-20260303"}, calls[0][2])
         self.assertIn("AMI tag is required.", output.getvalue())
+
+    def test_dispatch_action_destroy_passes_eip_destroy_when_user_confirms(self) -> None:
+        """Expected: destroy action sets EIP_DESTROY=1 when user answers yes to EIP prompt."""
+        environment = self._targets()[0]
+        calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
+        # "yes" → confirm stack destroy; "y" → release EIP
+        inputs = iter(["yes", "y"])
+
+        dispatch_action(
+            "destroy",
+            environment,
+            input_func=lambda _prompt: next(inputs),
+            out=io.StringIO(),
+            runner=lambda command, cwd, env_overrides: calls.append((command, cwd, env_overrides)),
+        )
+
+        self.assertEqual(1, len(calls))
+        self.assertEqual({"EIP_DESTROY": "1"}, calls[0][2])
+
+    def test_dispatch_action_destroy_omits_eip_destroy_when_user_declines(self) -> None:
+        """Edge: destroy action passes no env overrides when user declines EIP release."""
+        environment = self._targets()[0]
+        calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
+        # "yes" → confirm stack destroy; "n" → keep EIP
+        inputs = iter(["yes", "n"])
+
+        dispatch_action(
+            "destroy",
+            environment,
+            input_func=lambda _prompt: next(inputs),
+            out=io.StringIO(),
+            runner=lambda command, cwd, env_overrides: calls.append((command, cwd, env_overrides)),
+        )
+
+        self.assertEqual(1, len(calls))
+        self.assertIsNone(calls[0][2])
+
+    def test_dispatch_action_destroy_and_save_includes_eip_destroy_when_confirmed(self) -> None:
+        """Expected: destroy+save merges EIP_DESTROY into AMI env overrides when user confirms."""
+        environment = self._targets()[0]
+        calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
+        # tag; confirm; release EIP
+        inputs = iter(["my-tag", "yes", "y"])
+
+        dispatch_action(
+            "destroy_and_save",
+            environment,
+            input_func=lambda _prompt: next(inputs),
+            out=io.StringIO(),
+            runner=lambda command, cwd, env_overrides: calls.append((command, cwd, env_overrides)),
+        )
+
+        self.assertEqual(1, len(calls))
+        self.assertEqual(
+            {"AMI_SAVE": "1", "AMI_TAG": "my-tag", "EIP_DESTROY": "1"},
+            calls[0][2],
+        )
 
     def test_dispatch_action_switch_environment_returns_switch_signal(self) -> None:
         """Edge: switch action returns control to environment picker without commands."""
