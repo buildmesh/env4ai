@@ -71,10 +71,22 @@ from workstation_core.interactive_workstation import (
     run_script,
     save_last_used_environment_key,
 )
+from workstation_core.elastic_ip import (
+    associate_eip_with_instance,
+    create_eip,
+    find_eip_by_name,
+    find_or_create_eip,
+    release_eip,
+)
 from workstation_core.workstation_status import WorkstationStatus, get_workstation_status
 
 __all__ = [
     "AmiSelectorConfig",
+    "associate_eip_with_instance",
+    "create_eip",
+    "find_eip_by_name",
+    "find_or_create_eip",
+    "release_eip",
     "AmiModeConfig",
     "AmiSelectionResult",
     "CdkTarget",

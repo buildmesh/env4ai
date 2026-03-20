@@ -20,6 +20,7 @@ from workstation_core.ami_lifecycle import (
     read_ami_mode_from_env,
     resolve_ami_selection,
 )
+from workstation_core.elastic_ip import find_or_create_eip
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +148,7 @@ def run_stop_orchestration(
     create_image: Callable[[str, str], str],
     wait_for_image_available: Callable[[str], None],
     destroy_stack: Callable[[], None],
+    release_eip: Callable[[], None] | None = None,
 ) -> str | None:
     """Run stop-time AMI save orchestration and destroy gating.
 
@@ -156,6 +158,7 @@ def run_stop_orchestration(
         create_image: Callback creating image from instance id and image name.
         wait_for_image_available: Callback waiting for AMI to become available.
         destroy_stack: Callback executing the destroy operation.
+        release_eip: Optional callback to release the associated Elastic IP after destroy.
 
     Returns:
         Saved AMI id when AMI save is enabled, otherwise ``None``.
@@ -177,6 +180,11 @@ def run_stop_orchestration(
         wait_for_image_available(saved_image_id)
 
     destroy_stack()
+
+    # Reason: release EIP after destroy so connectivity is preserved if destroy fails.
+    if release_eip is not None:
+        release_eip()
+
     return saved_image_id
 
 
@@ -247,13 +255,16 @@ def deploy_stack(
     stack_dir: str,
     ami_id: str | None,
     bootstrap_on_restored_ami: bool,
+    eip_allocation_id: str | None = None,
 ) -> None:
-    """Deploy CDK stack with optional AMI and restored-AMI bootstrap context."""
+    """Deploy CDK stack with optional AMI, bootstrap, and EIP context."""
     command: list[str] = ["uv", "run", "cdk", "deploy", "--require-approval", "never"]
     if ami_id:
         command.extend(["-c", f"ami_id={ami_id}"])
         if bootstrap_on_restored_ami:
             command.extend(["-c", "bootstrap_on_restored_ami=true"])
+    if eip_allocation_id:
+        command.extend(["-c", f"eip_allocation_id={eip_allocation_id}"])
     run_command(
         command,
         cwd=stack_dir,
@@ -261,10 +272,27 @@ def deploy_stack(
     )
 
 
-def run_post_deploy_check(stack_dir: str, stack_name: str) -> None:
-    """Run instance helper after a successful deploy."""
+def run_post_deploy_check(
+    stack_dir: str,
+    stack_name: str,
+    eip_allocation_id: str | None = None,
+    eip_public_ip: str | None = None,
+) -> None:
+    """Run instance helper after a successful deploy.
+
+    Args:
+        stack_dir: CDK app directory to run the check from.
+        stack_name: CloudFormation stack name for instance lookup.
+        eip_allocation_id: Optional EIP allocation ID to associate with the instance.
+        eip_public_ip: Optional EIP public IP to show in SSH config output.
+    """
+    command = ["uv", "run", "../scripts/check_instance.py", "--stack-name", stack_name]
+    if eip_allocation_id:
+        command.extend(["--eip-allocation-id", eip_allocation_id])
+    if eip_public_ip:
+        command.extend(["--eip-public-ip", eip_public_ip])
     run_command(
-        ["uv", "run", "../scripts/check_instance.py", "--stack-name", stack_name],
+        command,
         cwd=stack_dir,
         timeout_seconds=POST_DEPLOY_CHECK_TIMEOUT_SECONDS,
     )
@@ -326,10 +354,17 @@ def run_deploy_lifecycle(
     if not selection.should_deploy:
         return 0
 
+    eip_info = find_or_create_eip(ec2_client=ec2_client, name=environment_key)
     deploy_stack(
         stack_dir=inputs.stack_dir,
         ami_id=selection.selected_ami_id,
         bootstrap_on_restored_ami=mode.ami_bootstrap,
+        eip_allocation_id=eip_info["allocation_id"],
     )
-    run_post_deploy_check(stack_dir=inputs.stack_dir, stack_name=inputs.stack_name)
+    run_post_deploy_check(
+        stack_dir=inputs.stack_dir,
+        stack_name=inputs.stack_name,
+        eip_allocation_id=eip_info["allocation_id"],
+        eip_public_ip=eip_info["public_ip"],
+    )
     return 0

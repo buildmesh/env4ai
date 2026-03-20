@@ -97,6 +97,49 @@ class StopOrchestrationTests(unittest.TestCase):
 
         destroy_stack.assert_not_called()
 
+    def test_run_stop_orchestration_releases_eip_after_destroy_when_callback_provided(self) -> None:
+        """Expected: EIP release callback is called after stack destroy when provided."""
+        calls: list[str] = []
+        destroy_stack = lambda: calls.append("destroy")
+        release_eip = lambda: calls.append("release_eip")
+
+        run_stop_orchestration(
+            StopOrchestrationInputs(
+                environment_key="gastown",
+                stack_name="GastownWorkstationStack",
+                spot_fleet_logical_id="GastownSpotFleet",
+                ami_save=False,
+                ami_tag=None,
+            ),
+            resolve_running_instance_id=Mock(),
+            create_image=Mock(),
+            wait_for_image_available=Mock(),
+            destroy_stack=destroy_stack,
+            release_eip=release_eip,
+        )
+
+        self.assertEqual(["destroy", "release_eip"], calls)
+
+    def test_run_stop_orchestration_skips_eip_release_when_no_callback(self) -> None:
+        """Edge: no release_eip callback means EIP is left untouched after destroy."""
+        destroy_stack = Mock()
+
+        run_stop_orchestration(
+            StopOrchestrationInputs(
+                environment_key="gastown",
+                stack_name="GastownWorkstationStack",
+                spot_fleet_logical_id="GastownSpotFleet",
+                ami_save=False,
+                ami_tag=None,
+            ),
+            resolve_running_instance_id=Mock(),
+            create_image=Mock(),
+            wait_for_image_available=Mock(),
+            destroy_stack=destroy_stack,
+        )
+
+        destroy_stack.assert_called_once_with()
+
     def test_parse_stop_ami_config_requires_tag_when_save_enabled(self) -> None:
         """Failure: save flag without AMI tag is rejected."""
         with self.assertRaisesRegex(RuntimeError, "AMI_SAVE=1 requires AMI_TAG"):

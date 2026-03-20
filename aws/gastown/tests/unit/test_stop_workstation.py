@@ -21,6 +21,7 @@ class StopWorkstationScriptTests(unittest.TestCase):
                 "spot_fleet_logical_id": None,
                 "profile": None,
                 "region": None,
+                "destroy_eip": False,
             },
         )()
 
@@ -60,6 +61,72 @@ class StopWorkstationScriptTests(unittest.TestCase):
         self.assertTrue(inputs.ami_save)
         self.assertEqual("release-a", inputs.ami_tag)
         self.assertEqual("gastown", inputs.environment_key)
+
+    def test_main_passes_release_eip_callback_when_destroy_eip_flag_set(self) -> None:
+        """Expected: destroy-eip flag causes a release_eip callback to be passed to orchestration."""
+        args = type(
+            "Args",
+            (),
+            {
+                "environment": "gastown",
+                "stack_dir": "/tmp/gastown",
+                "stack_name": "GastownWorkstationStack",
+                "spot_fleet_logical_id": None,
+                "profile": None,
+                "region": None,
+                "destroy_eip": True,
+            },
+        )()
+        session = Mock()
+        session.region_name = "us-west-2"
+        session.client.side_effect = [Mock(), Mock()]
+        eip_info = {"allocation_id": "eipalloc-abc123", "public_ip": "1.2.3.4"}
+
+        with (
+            patch("stop_workstation.parse_args", return_value=args),
+            patch("stop_workstation.parse_stop_ami_config", return_value=(False, None)),
+            patch("stop_workstation.boto3.Session", return_value=session),
+            patch("stop_workstation.find_eip_by_name", return_value=eip_info),
+            patch("stop_workstation.run_stop_orchestration", return_value=None) as run_orchestration,
+        ):
+            result = main()
+
+        self.assertEqual(0, result)
+        call_kwargs = run_orchestration.call_args.kwargs
+        self.assertIsNotNone(call_kwargs.get("release_eip"))
+
+    def test_main_warns_and_skips_eip_release_when_no_eip_found(self) -> None:
+        """Edge: destroy-eip with no matching EIP logs a warning and passes no callback."""
+        args = type(
+            "Args",
+            (),
+            {
+                "environment": "gastown",
+                "stack_dir": "/tmp/gastown",
+                "stack_name": "GastownWorkstationStack",
+                "spot_fleet_logical_id": None,
+                "profile": None,
+                "region": None,
+                "destroy_eip": True,
+            },
+        )()
+        session = Mock()
+        session.region_name = "us-west-2"
+        session.client.side_effect = [Mock(), Mock()]
+
+        with (
+            patch("stop_workstation.parse_args", return_value=args),
+            patch("stop_workstation.parse_stop_ami_config", return_value=(False, None)),
+            patch("stop_workstation.boto3.Session", return_value=session),
+            patch("stop_workstation.find_eip_by_name", return_value=None),
+            patch("stop_workstation.run_stop_orchestration", return_value=None) as run_orchestration,
+            patch("builtins.print"),
+        ):
+            result = main()
+
+        self.assertEqual(0, result)
+        call_kwargs = run_orchestration.call_args.kwargs
+        self.assertIsNone(call_kwargs.get("release_eip"))
 
     def test_main_raises_when_region_is_unresolvable(self) -> None:
         """Failure: wrapper aborts before orchestration if region cannot be resolved."""

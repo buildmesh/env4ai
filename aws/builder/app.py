@@ -22,12 +22,14 @@ def main() -> None:
             value=bootstrap_on_restored_context,
             context_key="bootstrap_on_restored_ami",
         )
+    eip_allocation_id = parse_optional_text_context(app.node.try_get_context("eip_allocation_id"))
 
     WorkstationStack(
         app,
         ENVIRONMENT_SPEC.stack_name,
         ami_id_override=ami_id_override,
         bootstrap_on_restored_ami=bootstrap_on_restored_ami,
+        eip_allocation_id=eip_allocation_id,
         environment_spec=ENVIRONMENT_SPEC,
         env=cdk.Environment(account=get_account(), region=get_region()),
     )

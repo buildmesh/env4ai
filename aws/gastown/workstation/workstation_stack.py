@@ -27,6 +27,7 @@ class WorkstationStack(Stack):
         ami_source: Literal["default", "selected"] | None = None,
         selected_ami_id: str | None = None,
         bootstrap_on_restored_ami: bool = False,
+        eip_allocation_id: str | None = None,
         environment_spec: EnvironmentSpec = ENVIRONMENT_SPEC,
         **kwargs,
     ) -> None:
@@ -41,10 +42,19 @@ class WorkstationStack(Stack):
                 ``ami_id_override`` behavior is preserved.
             selected_ami_id: Explicit AMI ID when using selected source mode.
             bootstrap_on_restored_ami: Opt-in to run full bootstrap for restored AMIs.
+            eip_allocation_id: Optional Elastic IP allocation ID to track in stack outputs.
             environment_spec: Canonical environment configuration and naming source.
             **kwargs: Additional ``Stack`` keyword args.
         """
         super().__init__(scope, construct_id, **kwargs)
+
+        if eip_allocation_id:
+            CfnOutput(
+                self,
+                environment_spec.construct_id("EipAllocationId"),
+                value=eip_allocation_id,
+                description="Elastic IP allocation ID associated with this workstation.",
+            )
 
         # Create a new VPC using environment-derived naming.
         vpc = ec2.Vpc(self, environment_spec.construct_id("VPC"),

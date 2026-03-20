@@ -16,11 +16,13 @@ from workstation_core import (
     StopOrchestrationInputs,
     build_stop_image_name,
     create_image_from_instance,
+    is_truthy,
     parse_stop_ami_config,
     resolve_running_instance_id,
     run_stop_orchestration,
     wait_for_image_available,
 )
+from workstation_core.elastic_ip import find_eip_by_name, release_eip as _release_eip
 
 DESTROY_TIMEOUT_SECONDS = 45 * 60
 
@@ -62,6 +64,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--region",
         default=None,
         help="Optional AWS region override.",
+    )
+    parser.add_argument(
+        "--destroy-eip",
+        action="store_true",
+        default=False,
+        help="Release the associated Elastic IP after the stack is destroyed. Also enabled by EIP_DESTROY=1.",
     )
     return parser.parse_args(argv)
 
@@ -135,6 +143,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         ami_tag=ami_tag,
     )
 
+    eip_destroy = args.destroy_eip or is_truthy(os.environ.get("EIP_DESTROY", ""))
+    release_eip_callback = None
+    if eip_destroy:
+        eip_info = find_eip_by_name(ec2_client, environment_key)
+        if eip_info is not None:
+            allocation_id = eip_info["allocation_id"]
+            release_eip_callback = lambda: _release_eip(ec2_client, allocation_id)
+        else:
+            print(f"Warning: no Elastic IP found with Name={environment_key!r}, skipping release.")
+
     saved_image_id = run_stop_orchestration(
         stop_inputs,
         resolve_running_instance_id=lambda: resolve_running_instance_id(
@@ -157,6 +175,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             cwd=args.stack_dir,
             timeout_seconds=DESTROY_TIMEOUT_SECONDS,
         ),
+        release_eip=release_eip_callback,
     )
 
     if saved_image_id is not None:

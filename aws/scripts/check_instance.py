@@ -86,6 +86,16 @@ def parse_args() -> argparse.Namespace:
         default="~/.ssh/aws_key.pem",
         help="SSH identity file path to show in the SSH config snippet.",
     )
+    parser.add_argument(
+        "--eip-allocation-id",
+        default=None,
+        help="Elastic IP allocation ID to associate with the instance.",
+    )
+    parser.add_argument(
+        "--eip-public-ip",
+        default=None,
+        help="Elastic IP public IP address to show in SSH config (used with --eip-allocation-id).",
+    )
     return parser.parse_args()
 
 
@@ -272,16 +282,37 @@ def main() -> int:
     if launch_time:
         print(f"Launch time: {launch_time}")
 
-    if not public_ip:
+    eip_allocation_id = normalize_optional(args.eip_allocation_id)
+    eip_public_ip = normalize_optional(args.eip_public_ip)
+
+    if eip_allocation_id:
+        if not public_ip:
+            print("Public IP not assigned yet; cannot associate Elastic IP. Wait a moment, then run this script again.")
+            return 1
+        try:
+            ec2_client.associate_address(
+                AllocationId=eip_allocation_id,
+                InstanceId=instance_id,
+                AllowReassociation=True,
+            )
+            print(f"Elastic IP associated: {eip_public_ip or eip_allocation_id}")
+        except (BotoCoreError, ClientError) as exc:
+            print(f"Warning: Elastic IP association failed: {exc}")
+        # Reason: use the stable EIP address for SSH config when available.
+        display_ip = eip_public_ip or public_ip
+    else:
+        display_ip = public_ip
+
+    if not display_ip:
         print("Public IP not assigned yet. Wait a moment, then run this script again.")
         return 1
 
-    print(f"Public IP: {public_ip}")
+    print(f"Public IP: {display_ip}")
     print("\nAdd this to ~/.ssh/config:\n")
     print(
         build_ssh_config_snippet(
             host_alias=args.ssh_host_alias,
-            ip_address=public_ip,
+            ip_address=display_ip,
             ssh_user=args.ssh_user,
             identity_file=args.identity_file,
         )

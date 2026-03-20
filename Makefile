@@ -11,7 +11,8 @@ DOCKER_COMPOSE_RUN := docker compose run --rm \
 	-e AMI_PICK \
 	-e AMI_BOOTSTRAP \
 	-e AMI_SAVE \
-	-e AMI_TAG
+	-e AMI_TAG \
+	-e EIP_DESTROY
 
 .PHONY: interactive aws
 

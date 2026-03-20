@@ -177,6 +177,8 @@ class CheckScriptTests(unittest.TestCase):
                 "ssh_host_alias": "gastown-workstation",
                 "ssh_user": "ubuntu",
                 "identity_file": "~/.ssh/aws_key.pem",
+                "eip_allocation_id": None,
+                "eip_public_ip": None,
             },
         )()
         session = Mock()
@@ -215,6 +217,8 @@ class CheckScriptTests(unittest.TestCase):
                 "ssh_host_alias": "gastown-workstation",
                 "ssh_user": "ubuntu",
                 "identity_file": "~/.ssh/aws_key.pem",
+                "eip_allocation_id": None,
+                "eip_public_ip": None,
             },
         )()
         session = Mock()
