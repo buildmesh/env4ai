@@ -1,13 +1,23 @@
+"""Unit tests for base_stack/app.py.
+
+Consolidated from builder/tests/unit/test_app.py and
+gastown/tests/unit/test_app.py, which were identical in structure but
+duplicated for each environment.
+"""
+
 from pathlib import Path
 import sys
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+_FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+_BASE_STACK = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(_FIXTURES))
+sys.path.insert(0, str(_BASE_STACK))
 
-import app as gastown_app
-from environment_config import GASTOWN_ENVIRONMENT_SPEC
+import app as base_app
+from environment_config import ENVIRONMENT_SPEC
 
 
 class AppResolverTests(unittest.TestCase):
@@ -19,12 +29,12 @@ class AppResolverTests(unittest.TestCase):
                 RuntimeError,
                 "Unable to resolve AWS account: CDK_DEFAULT_ACCOUNT is not set and /run/secrets/aws_acct is missing or empty.",
             ):
-                gastown_app.get_account(env={}, secret_path=missing_secret_path)
+                base_app.get_account(env={}, secret_path=missing_secret_path)
 
     def test_parse_optional_bool_context_true_variants(self) -> None:
         """Expected: parser accepts common true values for context flags."""
         self.assertTrue(
-            gastown_app.parse_optional_bool_context(
+            base_app.parse_optional_bool_context(
                 value="true",
                 context_key="bootstrap_on_restored_ami",
             )
@@ -33,7 +43,7 @@ class AppResolverTests(unittest.TestCase):
     def test_parse_optional_bool_context_false_with_whitespace(self) -> None:
         """Edge: parser trims whitespace around false-like values."""
         self.assertFalse(
-            gastown_app.parse_optional_bool_context(
+            base_app.parse_optional_bool_context(
                 value="  off  ",
                 context_key="bootstrap_on_restored_ami",
             )
@@ -45,7 +55,7 @@ class AppResolverTests(unittest.TestCase):
             RuntimeError,
             "Invalid boolean context value for 'bootstrap_on_restored_ami'",
         ):
-            gastown_app.parse_optional_bool_context(
+            base_app.parse_optional_bool_context(
                 value="sometimes",
                 context_key="bootstrap_on_restored_ami",
             )
@@ -61,16 +71,17 @@ class AppResolverTests(unittest.TestCase):
             patch("app.cdk.Environment", return_value=environment_obj),
             patch("app.get_account", return_value="111111111111"),
             patch("app.get_region", return_value="us-west-2"),
-            patch("app.GastownWorkstationStack") as stack_mock,
+            patch("app.WorkstationStack") as stack_mock,
         ):
-            gastown_app.main()
+            base_app.main()
 
         stack_mock.assert_called_once_with(
             app_instance,
-            GASTOWN_ENVIRONMENT_SPEC.stack_name,
+            ENVIRONMENT_SPEC.stack_name,
             ami_id_override=None,
             bootstrap_on_restored_ami=False,
-            environment_spec=GASTOWN_ENVIRONMENT_SPEC,
+            eip_allocation_id=None,
+            environment_spec=ENVIRONMENT_SPEC,
             env=environment_obj,
         )
         app_instance.synth.assert_called_once()
@@ -88,16 +99,17 @@ class AppResolverTests(unittest.TestCase):
             patch("app.cdk.Environment", return_value=environment_obj),
             patch("app.get_account", return_value="111111111111"),
             patch("app.get_region", return_value="us-west-2"),
-            patch("app.GastownWorkstationStack") as stack_mock,
+            patch("app.WorkstationStack") as stack_mock,
         ):
-            gastown_app.main()
+            base_app.main()
 
         stack_mock.assert_called_once_with(
             app_instance,
-            GASTOWN_ENVIRONMENT_SPEC.stack_name,
+            ENVIRONMENT_SPEC.stack_name,
             ami_id_override="ami-override123",
             bootstrap_on_restored_ami=False,
-            environment_spec=GASTOWN_ENVIRONMENT_SPEC,
+            eip_allocation_id=None,
+            environment_spec=ENVIRONMENT_SPEC,
             env=environment_obj,
         )
         app_instance.synth.assert_called_once()
@@ -110,10 +122,10 @@ class AppResolverTests(unittest.TestCase):
         with (
             patch("app.cdk.App", return_value=app_instance),
             patch("app.get_account", side_effect=RuntimeError("missing account")),
-            patch("app.GastownWorkstationStack") as stack_mock,
+            patch("app.WorkstationStack") as stack_mock,
         ):
             with self.assertRaisesRegex(RuntimeError, "missing account"):
-                gastown_app.main()
+                base_app.main()
 
         stack_mock.assert_not_called()
         app_instance.synth.assert_not_called()

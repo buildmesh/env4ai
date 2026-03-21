@@ -1,4 +1,8 @@
-"""Unit tests for save_workstation_ami wrapper script."""
+"""Unit tests for save_workstation_ami wrapper script.
+
+Moved from gastown/tests/unit/test_save_workstation_ami.py.  The script lives
+in aws/scripts/ and is shared across all environments.
+"""
 
 from __future__ import annotations
 
@@ -20,11 +24,11 @@ class SaveWorkstationAmiScriptTests(unittest.TestCase):
         """Return common args for save-only tests."""
         return [
             "--environment",
-            "gastown",
+            "test",
             "--stack-dir",
-            "/tmp/gastown",
+            "/tmp/test",
             "--stack-name",
-            "GastownWorkstationStack",
+            "TestWorkstationStack",
             "--ami-tag",
             "release-a",
         ]
@@ -41,7 +45,7 @@ class SaveWorkstationAmiScriptTests(unittest.TestCase):
             patch("save_workstation_ami.create_image_from_instance", return_value="ami-123"),
             patch("save_workstation_ami.wait_for_image_available") as wait_for_image_available,
             patch("save_workstation_ami.load_environment_spec", return_value=None),
-            patch("save_workstation_ami._resolve_spot_fleet_logical_id", return_value="GastownSpotFleet"),
+            patch("save_workstation_ami._resolve_spot_fleet_logical_id", return_value="TestSpotFleet"),
         ):
             result = main(self._argv())
 
@@ -61,7 +65,7 @@ class SaveWorkstationAmiScriptTests(unittest.TestCase):
             patch("save_workstation_ami.create_image_from_instance", return_value="ami-123") as create_image,
             patch("save_workstation_ami.wait_for_image_available"),
             patch("save_workstation_ami.load_environment_spec", return_value=environment_spec),
-            patch("save_workstation_ami._resolve_spot_fleet_logical_id", return_value="GastownSpotFleet"),
+            patch("save_workstation_ami._resolve_spot_fleet_logical_id", return_value="TestSpotFleet"),
         ):
             main(self._argv())
 

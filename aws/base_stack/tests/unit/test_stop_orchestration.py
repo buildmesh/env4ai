@@ -1,7 +1,26 @@
+"""Unit tests for shared stop orchestration logic.
+
+Moved from gastown/tests/unit/test_stop_orchestration.py.  All logic under
+test lives in workstation_core and is environment-agnostic.
+"""
+
 import unittest
 from unittest.mock import Mock
 
 from workstation_core import StopOrchestrationInputs, parse_stop_ami_config, run_stop_orchestration
+
+
+def _inputs(**kwargs) -> StopOrchestrationInputs:
+    """Return a StopOrchestrationInputs with test defaults, overridable by kwargs."""
+    defaults = dict(
+        environment_key="test",
+        stack_name="TestWorkstationStack",
+        spot_fleet_logical_id="TestSpotFleet",
+        ami_save=False,
+        ami_tag=None,
+    )
+    defaults.update(kwargs)
+    return StopOrchestrationInputs(**defaults)
 
 
 class StopOrchestrationTests(unittest.TestCase):
@@ -13,13 +32,7 @@ class StopOrchestrationTests(unittest.TestCase):
         destroy_stack = Mock()
 
         saved_image_id = run_stop_orchestration(
-            StopOrchestrationInputs(
-                environment_key="gastown",
-                stack_name="GastownWorkstationStack",
-                spot_fleet_logical_id="GastownSpotFleet",
-                ami_save=False,
-                ami_tag=None,
-            ),
+            _inputs(),
             resolve_running_instance_id=resolve_running_instance,
             create_image=create_image,
             wait_for_image_available=wait_for_image,
@@ -51,13 +64,7 @@ class StopOrchestrationTests(unittest.TestCase):
             calls.append("destroy")
 
         saved_image_id = run_stop_orchestration(
-            StopOrchestrationInputs(
-                environment_key="gastown",
-                stack_name="GastownWorkstationStack",
-                spot_fleet_logical_id="GastownSpotFleet",
-                ami_save=True,
-                ami_tag=" 20260302 ",
-            ),
+            _inputs(ami_save=True, ami_tag=" 20260302 "),
             resolve_running_instance_id=resolve_running_instance_id,
             create_image=create_image,
             wait_for_image_available=wait_for_image_available,
@@ -68,7 +75,7 @@ class StopOrchestrationTests(unittest.TestCase):
         self.assertEqual(
             [
                 "resolve",
-                "create:i-abc:gastown_20260302",
+                "create:i-abc:test_20260302",
                 "wait:ami-new",
                 "destroy",
             ],
@@ -80,13 +87,7 @@ class StopOrchestrationTests(unittest.TestCase):
         destroy_stack = Mock()
         with self.assertRaisesRegex(RuntimeError, "wait failed"):
             run_stop_orchestration(
-                StopOrchestrationInputs(
-                    environment_key="gastown",
-                    stack_name="GastownWorkstationStack",
-                    spot_fleet_logical_id="GastownSpotFleet",
-                    ami_save=True,
-                    ami_tag="20260302",
-                ),
+                _inputs(ami_save=True, ami_tag="20260302"),
                 resolve_running_instance_id=lambda: "i-abc",
                 create_image=lambda _instance_id, _image_name: "ami-fail",
                 wait_for_image_available=lambda _image_id: (_ for _ in ()).throw(
@@ -104,13 +105,7 @@ class StopOrchestrationTests(unittest.TestCase):
         release_eip = lambda: calls.append("release_eip")
 
         run_stop_orchestration(
-            StopOrchestrationInputs(
-                environment_key="gastown",
-                stack_name="GastownWorkstationStack",
-                spot_fleet_logical_id="GastownSpotFleet",
-                ami_save=False,
-                ami_tag=None,
-            ),
+            _inputs(),
             resolve_running_instance_id=Mock(),
             create_image=Mock(),
             wait_for_image_available=Mock(),
@@ -125,13 +120,7 @@ class StopOrchestrationTests(unittest.TestCase):
         destroy_stack = Mock()
 
         run_stop_orchestration(
-            StopOrchestrationInputs(
-                environment_key="gastown",
-                stack_name="GastownWorkstationStack",
-                spot_fleet_logical_id="GastownSpotFleet",
-                ami_save=False,
-                ami_tag=None,
-            ),
+            _inputs(),
             resolve_running_instance_id=Mock(),
             create_image=Mock(),
             wait_for_image_available=Mock(),

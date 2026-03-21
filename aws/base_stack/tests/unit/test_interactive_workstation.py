@@ -1,4 +1,9 @@
-"""Unit tests for interactive workstation menu gating behavior."""
+"""Unit tests for interactive workstation menu gating behavior.
+
+Moved from gastown/tests/unit/test_interactive_workstation.py.  All logic
+under test lives in the shared scripts/interactive_workstation.py and
+workstation_core; it is not environment-specific.
+"""
 
 from __future__ import annotations
 
@@ -21,12 +26,12 @@ class InteractiveWorkstationScriptTests(unittest.TestCase):
     def _environment() -> EnvironmentTarget:
         """Build deterministic environment metadata for script tests."""
         return EnvironmentTarget(
-            environment_key="gastown",
-            display_name="Gastown",
-            stack_dir=Path("/tmp/gastown"),
-            stack_name="GastownWorkstationStack",
-            spot_fleet_logical_id="GastownSpotFleet",
-            ssh_alias="gastown-workstation",
+            environment_key="test",
+            display_name="Test",
+            stack_dir=Path("/tmp/test"),
+            stack_name="TestWorkstationStack",
+            spot_fleet_logical_id="TestSpotFleet",
+            ssh_alias="test-workstation",
         )
 
     def test_run_action_loop_blocks_disabled_action_without_dispatch(self) -> None:

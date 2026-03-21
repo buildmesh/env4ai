@@ -1,4 +1,8 @@
-"""Structural tests for the consolidated uv Python environment at aws/."""
+"""Structural tests for the consolidated uv Python environment at aws/.
+
+Moved from gastown/tests/unit/test_python_env.py.  These tests verify the
+top-level aws/ project layout and are not specific to any single environment.
+"""
 
 import tomllib
 import unittest

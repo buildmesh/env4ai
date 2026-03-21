@@ -1,11 +1,20 @@
+"""Unit tests for CDK app region resolution.
+
+Consolidated from builder/tests/unit/test_region_resolver.py and
+gastown/tests/unit/test_region_resolver.py, which were identical.
+"""
+
 from pathlib import Path
 import sys
 import tempfile
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+_FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+_BASE_STACK = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(_FIXTURES))
+sys.path.insert(0, str(_BASE_STACK))
 
-import app as builder_app
+import app as base_app
 
 
 class RegionResolverTests(unittest.TestCase):
@@ -15,7 +24,7 @@ class RegionResolverTests(unittest.TestCase):
             config_path = Path(tmpdir) / "config"
             config_path.write_text("[default]\nregion = us-west-2\n", encoding="utf-8")
 
-            region = builder_app.get_region(env={}, config_path=config_path)
+            region = base_app.get_region(env={}, config_path=config_path)
 
         self.assertEqual("us-west-2", region)
 
@@ -25,7 +34,7 @@ class RegionResolverTests(unittest.TestCase):
             config_path = Path(tmpdir) / "config"
             config_path.write_text("[profile sandbox]\nregion = us-west-1\n", encoding="utf-8")
 
-            region = builder_app.get_region(
+            region = base_app.get_region(
                 env={"AWS_PROFILE": "sandbox"}, config_path=config_path
             )
 
@@ -41,7 +50,7 @@ class RegionResolverTests(unittest.TestCase):
                 RuntimeError,
                 "Unable to resolve AWS region: no 'region' value found in profile '\\[default\\]' in ~/.aws/config.",
             ):
-                builder_app.get_region(env={}, config_path=config_path)
+                base_app.get_region(env={}, config_path=config_path)
 
     def test_get_region_raises_when_profile_section_missing(self) -> None:
         """Failure: selected profile section must exist in config."""
@@ -53,7 +62,7 @@ class RegionResolverTests(unittest.TestCase):
                 RuntimeError,
                 "Unable to resolve AWS region: profile section '\\[profile sandbox\\]' was not found in ~/.aws/config.",
             ):
-                builder_app.get_region(
+                base_app.get_region(
                     env={"AWS_PROFILE": "sandbox"}, config_path=config_path
                 )
 
@@ -65,7 +74,7 @@ class RegionResolverTests(unittest.TestCase):
                 RuntimeError,
                 "Unable to resolve AWS region: ~/.aws/config was not found and CDK_DEFAULT_REGION is not set.",
             ):
-                builder_app.get_region(env={}, config_path=missing_config_path)
+                base_app.get_region(env={}, config_path=missing_config_path)
 
 
 if __name__ == "__main__":

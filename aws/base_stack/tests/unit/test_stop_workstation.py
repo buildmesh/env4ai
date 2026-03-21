@@ -1,3 +1,11 @@
+"""Unit tests for the stop_workstation wrapper script.
+
+Consolidated from builder/tests/unit/test_stop_workstation.py and
+gastown/tests/unit/test_stop_workstation.py.  The gastown version was a
+superset (it covers EIP teardown), so those tests are retained here with
+neutral environment values.
+"""
+
 from pathlib import Path
 import sys
 import unittest
@@ -11,13 +19,14 @@ from stop_workstation import main  # noqa: E402
 class StopWorkstationScriptTests(unittest.TestCase):
     @staticmethod
     def _args() -> object:
+        """Build common argument payload for stop workstation tests."""
         return type(
             "Args",
             (),
             {
-                "environment": "gastown",
-                "stack_dir": "/tmp/gastown",
-                "stack_name": "GastownWorkstationStack",
+                "environment": "test",
+                "stack_dir": "/tmp/test",
+                "stack_name": "TestWorkstationStack",
                 "spot_fleet_logical_id": None,
                 "profile": None,
                 "region": None,
@@ -60,7 +69,7 @@ class StopWorkstationScriptTests(unittest.TestCase):
         inputs = run_orchestration.call_args.args[0]
         self.assertTrue(inputs.ami_save)
         self.assertEqual("release-a", inputs.ami_tag)
-        self.assertEqual("gastown", inputs.environment_key)
+        self.assertEqual("test", inputs.environment_key)
 
     def test_main_passes_release_eip_callback_when_destroy_eip_flag_set(self) -> None:
         """Expected: destroy-eip flag causes a release_eip callback to be passed to orchestration."""
@@ -68,9 +77,9 @@ class StopWorkstationScriptTests(unittest.TestCase):
             "Args",
             (),
             {
-                "environment": "gastown",
-                "stack_dir": "/tmp/gastown",
-                "stack_name": "GastownWorkstationStack",
+                "environment": "test",
+                "stack_dir": "/tmp/test",
+                "stack_name": "TestWorkstationStack",
                 "spot_fleet_logical_id": None,
                 "profile": None,
                 "region": None,
@@ -101,9 +110,9 @@ class StopWorkstationScriptTests(unittest.TestCase):
             "Args",
             (),
             {
-                "environment": "gastown",
-                "stack_dir": "/tmp/gastown",
-                "stack_name": "GastownWorkstationStack",
+                "environment": "test",
+                "stack_dir": "/tmp/test",
+                "stack_name": "TestWorkstationStack",
                 "spot_fleet_logical_id": None,
                 "profile": None,
                 "region": None,

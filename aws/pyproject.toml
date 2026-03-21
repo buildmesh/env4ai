@@ -12,3 +12,8 @@ dependencies = [
 
 [tool.uv.sources]
 workstation-core = { path = "workstation_core", editable = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

@@ -1,17 +1,45 @@
+"""Unit tests for the shared WorkstationStack CDK construct.
+
+Previously duplicated across builder/ and gastown/; now consolidated here
+because the stack implementation is identical for all environments.
+"""
+
+from pathlib import Path
+import sys
 import unittest
+
+_BASE_STACK = Path(__file__).resolve().parents[2]
+_FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+# environment_config must be importable before workstation_stack is imported.
+sys.path.insert(0, str(_FIXTURES))
+sys.path.insert(0, str(_BASE_STACK))
 
 import aws_cdk as core
 import aws_cdk.assertions as assertions
 from aws_cdk.assertions import Match
 
-from builder_workstation.builder_workstation_stack import (
-    BuilderWorkstationStack,
-)
-from environment_config import BUILDER_ENVIRONMENT_SPEC
+from workstation.workstation_stack import WorkstationStack
+from workstation_core import AmiSelectorConfig, EnvironmentSpec
 from workstation_core.cdk_helpers import resolve_ami_id, resolve_subnet_availability_zone
 
+# A deterministic spec so resource logical IDs are predictable in assertions.
+TEST_SPEC = EnvironmentSpec(
+    environment_key="test",
+    display_name="Test",
+    bootstrap_files=("bootstrap.sh",),
+    default_ami_selector=AmiSelectorConfig(
+        owner="099720109477",
+        name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*",
+        filters={"architecture": ("x86_64",)},
+    ),
+    instance_type="t3.micro",
+    volume_size=8,
+    spot_price="0.05",
+)
+# spot_fleet_logical_id == "TestSpotFleet" with display_name="Test"
 
-class BuilderWorkstationStackTests(unittest.TestCase):
+
+class WorkstationStackTests(unittest.TestCase):
     @staticmethod
     def _test_env() -> core.Environment:
         """Return a deterministic CDK env for stack synthesis in tests."""
@@ -20,8 +48,11 @@ class BuilderWorkstationStackTests(unittest.TestCase):
     def test_subnet_az_uses_dynamic_get_azs_select_by_default(self) -> None:
         """Expected: default subnet AZ is dynamic from deployment region."""
         app = core.App()
-        stack = BuilderWorkstationStack(
-            app, "aws-workstation-default-az", env=self._test_env()
+        stack = WorkstationStack(
+            app,
+            "aws-workstation-default-az",
+            environment_spec=TEST_SPEC,
+            env=self._test_env(),
         )
         template = assertions.Template.from_stack(stack)
 
@@ -40,10 +71,11 @@ class BuilderWorkstationStackTests(unittest.TestCase):
     def test_subnet_az_allows_non_default_index(self) -> None:
         """Edge: stack supports selecting a non-default AZ index."""
         app = core.App()
-        stack = BuilderWorkstationStack(
+        stack = WorkstationStack(
             app,
             "aws-workstation-secondary-az",
             availability_zone_index=1,
+            environment_spec=TEST_SPEC,
             env=self._test_env(),
         )
         template = assertions.Template.from_stack(stack)
@@ -71,10 +103,11 @@ class BuilderWorkstationStackTests(unittest.TestCase):
     def test_stack_uses_ami_override_when_context_provided(self) -> None:
         """Expected: Spot Fleet launch spec uses explicit deploy-time AMI override."""
         app = core.App()
-        stack = BuilderWorkstationStack(
+        stack = WorkstationStack(
             app,
-            "builder-workstation-ami-override",
+            "aws-workstation-ami-override",
             ami_id_override="ami-override123",
+            environment_spec=TEST_SPEC,
             env=self._test_env(),
         )
         template = assertions.Template.from_stack(stack)
@@ -93,11 +126,12 @@ class BuilderWorkstationStackTests(unittest.TestCase):
     def test_selected_ami_defaults_to_skipping_bootstrap_user_data(self) -> None:
         """Expected: selected AMI path omits user data unless explicitly enabled."""
         app = core.App()
-        stack = BuilderWorkstationStack(
+        stack = WorkstationStack(
             app,
-            "builder-workstation-selected-ami-no-bootstrap",
+            "aws-workstation-selected-ami-no-bootstrap",
             ami_source="selected",
             selected_ami_id="ami-0123456789abcdef0",
+            environment_spec=TEST_SPEC,
             env=self._test_env(),
         )
         template = assertions.Template.from_stack(stack)
@@ -123,12 +157,13 @@ class BuilderWorkstationStackTests(unittest.TestCase):
     def test_selected_ami_allows_explicit_bootstrap_opt_in(self) -> None:
         """Edge: selected AMI path can opt in to full bootstrap user data."""
         app = core.App()
-        stack = BuilderWorkstationStack(
+        stack = WorkstationStack(
             app,
-            "builder-workstation-selected-ami-bootstrap-opt-in",
+            "aws-workstation-selected-ami-bootstrap-opt-in",
             ami_source="selected",
             selected_ami_id="ami-0123456789abcdef0",
             bootstrap_on_restored_ami=True,
+            environment_spec=TEST_SPEC,
             env=self._test_env(),
         )
         template = assertions.Template.from_stack(stack)
@@ -158,12 +193,13 @@ class BuilderWorkstationStackTests(unittest.TestCase):
             ValueError,
             "ami_id_override conflicts with selected_ami_id",
         ):
-            BuilderWorkstationStack(
+            WorkstationStack(
                 app,
-                "builder-workstation-conflicting-ami-overrides",
+                "aws-workstation-conflicting-ami-overrides",
                 ami_id_override="ami-override123",
                 ami_source="selected",
                 selected_ami_id="ami-different456",
+                environment_spec=TEST_SPEC,
                 env=self._test_env(),
             )
 
@@ -174,17 +210,18 @@ class BuilderWorkstationStackTests(unittest.TestCase):
             ValueError,
             "selected_ami_id is required when ami_source is 'selected'",
         ):
-            BuilderWorkstationStack(
+            WorkstationStack(
                 app,
-                "builder-workstation-selected-ami-missing-id",
+                "aws-workstation-selected-ami-missing-id",
                 ami_source="selected",
+                environment_spec=TEST_SPEC,
                 env=self._test_env(),
             )
 
     def test_resolve_ami_id_rejects_unknown_source(self) -> None:
         """Failure: invalid AMI source values are rejected."""
         app = core.App()
-        stack = core.Stack(app, "builder-ami-id-resolver-stack", env=self._test_env())
+        stack = core.Stack(app, "ami-id-resolver-stack", env=self._test_env())
 
         with self.assertRaisesRegex(
             ValueError,
@@ -192,18 +229,21 @@ class BuilderWorkstationStackTests(unittest.TestCase):
         ):
             resolve_ami_id(
                 stack=stack,
-                environment_spec=BUILDER_ENVIRONMENT_SPEC,
+                environment_spec=TEST_SPEC,
                 ami_source="restored",  # type: ignore[arg-type]
             )
 
     def test_default_ami_path_includes_bootstrap_userdata(self) -> None:
         """Expected: default Ubuntu path includes full bootstrap user data."""
         app = core.App()
-        stack = BuilderWorkstationStack(
-            app, "builder-workstation-default-bootstrap", env=self._test_env()
+        stack = WorkstationStack(
+            app,
+            "aws-workstation-default-bootstrap",
+            environment_spec=TEST_SPEC,
+            env=self._test_env(),
         )
         template_dict = assertions.Template.from_stack(stack).to_json()
-        launch_spec = template_dict["Resources"]["BuilderSpotFleet"]["Properties"][
+        launch_spec = template_dict["Resources"]["TestSpotFleet"]["Properties"][
             "SpotFleetRequestConfigData"
         ]["LaunchSpecifications"][0]
 
@@ -213,14 +253,15 @@ class BuilderWorkstationStackTests(unittest.TestCase):
     def test_restored_ami_path_skips_bootstrap_userdata_by_default(self) -> None:
         """Edge: restored-AMI deploy omits bootstrap user data unless explicitly requested."""
         app = core.App()
-        stack = BuilderWorkstationStack(
+        stack = WorkstationStack(
             app,
-            "builder-workstation-restored-no-bootstrap",
+            "aws-workstation-restored-no-bootstrap",
             ami_id_override="ami-restored001",
+            environment_spec=TEST_SPEC,
             env=self._test_env(),
         )
         template_dict = assertions.Template.from_stack(stack).to_json()
-        launch_spec = template_dict["Resources"]["BuilderSpotFleet"]["Properties"][
+        launch_spec = template_dict["Resources"]["TestSpotFleet"]["Properties"][
             "SpotFleetRequestConfigData"
         ]["LaunchSpecifications"][0]
 
@@ -229,15 +270,16 @@ class BuilderWorkstationStackTests(unittest.TestCase):
     def test_restored_ami_path_allows_explicit_bootstrap_override(self) -> None:
         """Expected: restored-AMI deploy can opt-in to bootstrap user data."""
         app = core.App()
-        stack = BuilderWorkstationStack(
+        stack = WorkstationStack(
             app,
-            "builder-workstation-restored-with-bootstrap",
+            "aws-workstation-restored-with-bootstrap",
             ami_id_override="ami-restored002",
             bootstrap_on_restored_ami=True,
+            environment_spec=TEST_SPEC,
             env=self._test_env(),
         )
         template_dict = assertions.Template.from_stack(stack).to_json()
-        launch_spec = template_dict["Resources"]["BuilderSpotFleet"]["Properties"][
+        launch_spec = template_dict["Resources"]["TestSpotFleet"]["Properties"][
             "SpotFleetRequestConfigData"
         ]["LaunchSpecifications"][0]
 

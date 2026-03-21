@@ -1,3 +1,11 @@
+"""Unit tests for the check_instance script.
+
+Consolidated from builder/tests/unit/test_check.py and
+gastown/tests/unit/test_check.py.  The script lives in aws/scripts/ and is
+shared across all environments; environment-specific values in test args are
+replaced with neutral test values.
+"""
+
 from datetime import datetime, timezone
 import io
 from pathlib import Path
@@ -100,6 +108,7 @@ class CheckScriptTests(unittest.TestCase):
                 )
 
     def test_get_newest_instance_for_spot_fleet_returns_latest_launch_time(self) -> None:
+        """Expected: instance with the most recent LaunchTime is returned."""
         ec2_client = Mock()
         ec2_client.describe_spot_fleet_instances.return_value = {
             "ActiveInstances": [
@@ -131,6 +140,7 @@ class CheckScriptTests(unittest.TestCase):
         self.assertEqual("i-newer", result["InstanceId"])
 
     def test_get_newest_instance_for_spot_fleet_raises_when_no_active_instances(self) -> None:
+        """Failure: empty active instance list raises RuntimeError."""
         ec2_client = Mock()
         ec2_client.describe_spot_fleet_instances.return_value = {"ActiveInstances": []}
 
@@ -138,6 +148,7 @@ class CheckScriptTests(unittest.TestCase):
             get_newest_instance_for_spot_fleet(ec2_client, "sfr-123")
 
     def test_get_spot_fleet_request_id_raises_on_cloudformation_error(self) -> None:
+        """Failure: CloudFormation error is re-raised as RuntimeError."""
         cloudformation_client = Mock()
         cloudformation_client.describe_stack_resource.side_effect = ClientError(
             error_response={"Error": {"Code": "ValidationError", "Message": "bad request"}},
@@ -147,19 +158,20 @@ class CheckScriptTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             get_spot_fleet_request_id(
                 cloudformation_client=cloudformation_client,
-                stack_name="BuilderWorkstationStack",
-                logical_resource_id="BuilderSpotFleet",
+                stack_name="TestWorkstationStack",
+                logical_resource_id="TestSpotFleet",
             )
 
     def test_build_ssh_config_snippet(self) -> None:
+        """Expected: SSH config snippet contains all required fields."""
         snippet = build_ssh_config_snippet(
-            host_alias="builder-workstation",
+            host_alias="test-workstation",
             ip_address="203.0.113.10",
             ssh_user="ubuntu",
             identity_file="~/.ssh/aws_key.pem",
         )
 
-        self.assertIn("Host builder-workstation", snippet)
+        self.assertIn("Host test-workstation", snippet)
         self.assertIn("HostName 203.0.113.10", snippet)
         self.assertIn("User ubuntu", snippet)
         self.assertIn("IdentityFile ~/.ssh/aws_key.pem", snippet)
@@ -172,11 +184,13 @@ class CheckScriptTests(unittest.TestCase):
             {
                 "region": "us-west-2",
                 "profile": None,
-                "stack_name": "BuilderWorkstationStack",
-                "spot_fleet_logical_id": "BuilderSpotFleet",
-                "ssh_host_alias": "builder-workstation",
+                "stack_name": "TestWorkstationStack",
+                "spot_fleet_logical_id": "TestSpotFleet",
+                "ssh_host_alias": "test-workstation",
                 "ssh_user": "ubuntu",
                 "identity_file": "~/.ssh/aws_key.pem",
+                "eip_allocation_id": None,
+                "eip_public_ip": None,
             },
         )()
         session = Mock()
@@ -210,11 +224,13 @@ class CheckScriptTests(unittest.TestCase):
             {
                 "region": "us-east-1",
                 "profile": None,
-                "stack_name": "BuilderWorkstationStack",
-                "spot_fleet_logical_id": "BuilderSpotFleet",
-                "ssh_host_alias": "builder-workstation",
+                "stack_name": "TestWorkstationStack",
+                "spot_fleet_logical_id": "TestSpotFleet",
+                "ssh_host_alias": "test-workstation",
                 "ssh_user": "ubuntu",
                 "identity_file": "~/.ssh/aws_key.pem",
+                "eip_allocation_id": None,
+                "eip_public_ip": None,
             },
         )()
         session = Mock()
@@ -248,9 +264,9 @@ class CheckScriptTests(unittest.TestCase):
             {
                 "region": None,
                 "profile": None,
-                "stack_name": "BuilderWorkstationStack",
-                "spot_fleet_logical_id": "BuilderSpotFleet",
-                "ssh_host_alias": "builder-workstation",
+                "stack_name": "TestWorkstationStack",
+                "spot_fleet_logical_id": "TestSpotFleet",
+                "ssh_host_alias": "test-workstation",
                 "ssh_user": "ubuntu",
                 "identity_file": "~/.ssh/aws_key.pem",
             },

@@ -1,4 +1,8 @@
-"""Unit tests for deploy_workstation wrapper script."""
+"""Unit tests for the deploy_workstation wrapper script.
+
+Moved from gastown/tests/unit/test_deploy_workstation.py.  The script lives
+in aws/scripts/ and is shared across all environments.
+"""
 
 from __future__ import annotations
 
@@ -22,20 +26,20 @@ class DeployWorkstationScriptTests(unittest.TestCase):
             result = main(
                 [
                     "--environment",
-                    "gastown",
+                    "test",
                     "--stack-dir",
-                    "/tmp/gastown",
+                    "/tmp/test",
                     "--stack-name",
-                    "GastownWorkstationStack",
+                    "TestWorkstationStack",
                 ]
             )
 
         self.assertEqual(0, result)
         run_flow.assert_called_once_with(
             DeployWorkflowInputs(
-                environment="gastown",
-                stack_dir="/tmp/gastown",
-                stack_name="GastownWorkstationStack",
+                environment="test",
+                stack_dir="/tmp/test",
+                stack_name="TestWorkstationStack",
                 profile=None,
                 region=None,
             )
@@ -46,11 +50,11 @@ class DeployWorkstationScriptTests(unittest.TestCase):
         args = parse_args(
             [
                 "--environment",
-                "gastown",
+                "test",
                 "--stack-dir",
-                "/tmp/gastown",
+                "/tmp/test",
                 "--stack-name",
-                "GastownWorkstationStack",
+                "TestWorkstationStack",
                 "--profile",
                 "dev",
                 "--region",
@@ -71,11 +75,11 @@ class DeployWorkstationScriptTests(unittest.TestCase):
                 main(
                     [
                         "--environment",
-                        "gastown",
+                        "test",
                         "--stack-dir",
-                        "/tmp/gastown",
+                        "/tmp/test",
                         "--stack-name",
-                        "GastownWorkstationStack",
+                        "TestWorkstationStack",
                     ]
                 )
 
