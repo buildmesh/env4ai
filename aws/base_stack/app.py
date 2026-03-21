@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 import os
+from pathlib import Path
 import sys
 import aws_cdk as cdk
 
-sys.path.insert(0, os.getcwd())
+# Reason: when invoked as `python3 ../base_stack/app.py` from an env dir, CWD
+# is the env dir (so environment_config.py is found) but this file lives in
+# base_stack/ (so workstation/ is found via APP_DIR).
+_APP_DIR = str(Path(__file__).resolve().parent)
+sys.path.insert(0, _APP_DIR)  # finds workstation/ in base_stack/
+sys.path.insert(0, os.getcwd())  # finds environment_config.py in the env dir (higher priority)
 
 from environment_config import ENVIRONMENT_SPEC
 from workstation.workstation_stack import WorkstationStack
