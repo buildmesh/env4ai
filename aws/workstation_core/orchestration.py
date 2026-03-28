@@ -20,6 +20,7 @@ from workstation_core.ami_lifecycle import (
     read_ami_mode_from_env,
     resolve_ami_selection,
 )
+from workstation_core.config import get_shared_network_config
 from workstation_core.elastic_ip import find_or_create_eip
 
 
@@ -79,6 +80,7 @@ class StopOrchestrationInputs:
 LOGGER = logging.getLogger(__name__)
 DEPLOY_COMMAND_TIMEOUT_SECONDS = 45 * 60
 POST_DEPLOY_CHECK_TIMEOUT_SECONDS = 5 * 60
+DELETE_COMPLETE_STACK_STATUS = "DELETE_COMPLETE"
 
 
 def validate_plan(plan: OrchestrationPlan) -> None:
@@ -253,12 +255,13 @@ def run_command(command: Sequence[str], cwd: str, timeout_seconds: int | None = 
 
 def deploy_stack(
     stack_dir: str,
+    stack_name: str,
     ami_id: str | None,
     bootstrap_on_restored_ami: bool,
     eip_allocation_id: str | None = None,
 ) -> None:
     """Deploy CDK stack with optional AMI, bootstrap, and EIP context."""
-    command: list[str] = ["uv", "run", "cdk", "deploy", "--require-approval", "never"]
+    command: list[str] = ["uv", "run", "cdk", "deploy", "--require-approval", "never", stack_name]
     if ami_id:
         command.extend(["-c", f"ami_id={ami_id}"])
         if bootstrap_on_restored_ami:
@@ -267,6 +270,23 @@ def deploy_stack(
         command.extend(["-c", f"eip_allocation_id={eip_allocation_id}"])
     run_command(
         command,
+        cwd=stack_dir,
+        timeout_seconds=DEPLOY_COMMAND_TIMEOUT_SECONDS,
+    )
+
+
+def deploy_shared_network_stack(stack_dir: str) -> None:
+    """Deploy or update the shared network stack before environment deploy."""
+    run_command(
+        [
+            "uv",
+            "run",
+            "cdk",
+            "deploy",
+            "--require-approval",
+            "never",
+            get_shared_network_config().stack_name,
+        ],
         cwd=stack_dir,
         timeout_seconds=DEPLOY_COMMAND_TIMEOUT_SECONDS,
     )
@@ -315,6 +335,82 @@ def _resolve_profile(profile_override: str | None, env: Mapping[str, str]) -> st
     return env.get("AWS_PROFILE")
 
 
+def _list_stack_names(cloudformation_client: BaseClient) -> set[str]:
+    """Return non-deleted CloudFormation stack names in the current account/region."""
+    paginator = cloudformation_client.get_paginator("list_stacks")
+    stack_names: set[str] = set()
+    for page in paginator.paginate():
+        for summary in page.get("StackSummaries", []):
+            stack_status = str(summary.get("StackStatus", ""))
+            stack_name = str(summary.get("StackName", "")).strip()
+            if stack_name and stack_status != DELETE_COMPLETE_STACK_STATUS:
+                stack_names.add(stack_name)
+    return stack_names
+
+
+def _resolve_stack_dir(aws_root: Path) -> str:
+    """Select a deterministic environment CDK directory for shared stack commands."""
+    candidates = sorted(
+        path
+        for path in aws_root.iterdir()
+        if path.is_dir()
+        and (path / "cdk.json").is_file()
+        and (path / "environment_config.py").is_file()
+    )
+    if not candidates:
+        raise RuntimeError(f"No environment CDK directories found under {aws_root}.")
+    return str(candidates[0])
+
+
+def _discover_environment_stack_names(aws_root: Path) -> set[str]:
+    """Load stack names for all repository-managed environments."""
+    stack_names: set[str] = set()
+    for env_dir in sorted(path for path in aws_root.iterdir() if path.is_dir()):
+        environment_spec = load_environment_spec(str(env_dir))
+        if environment_spec is not None:
+            stack_names.add(str(environment_spec.stack_name))
+    return stack_names
+
+
+def destroy_shared_network_stack(
+    *,
+    profile: str | None,
+    region: str | None,
+    aws_root: str | Path | None = None,
+    out: TextIO = sys.stdout,
+) -> int:
+    """Destroy the shared network stack after confirming no environment stacks remain."""
+    shared_network = get_shared_network_config()
+    aws_root_path = Path(aws_root) if aws_root is not None else Path(__file__).resolve().parents[1]
+    session = boto3.Session(profile_name=profile, region_name=region)
+    if not session.region_name:
+        raise RuntimeError(
+            "Unable to resolve AWS region. Set --region, AWS_REGION, AWS_DEFAULT_REGION, or configure profile region."
+        )
+
+    cloudformation_client = session.client("cloudformation")
+    active_stack_names = _list_stack_names(cloudformation_client)
+    if shared_network.stack_name not in active_stack_names:
+        print(f"{shared_network.stack_name} does not exist; nothing to destroy.", file=out)
+        return 0
+
+    environment_stack_names = _discover_environment_stack_names(aws_root_path)
+    dependent_stack_names = sorted(active_stack_names.intersection(environment_stack_names))
+    if dependent_stack_names:
+        raise RuntimeError(
+            "Cannot destroy Env4aiNetworkStack while environment stacks still exist: "
+            + ", ".join(dependent_stack_names)
+        )
+
+    run_command(
+        ["uv", "run", "cdk", "destroy", "--force", shared_network.stack_name],
+        cwd=_resolve_stack_dir(aws_root_path),
+        timeout_seconds=DEPLOY_COMMAND_TIMEOUT_SECONDS,
+    )
+    print(f"Destroyed {shared_network.stack_name}.", file=out)
+    return 0
+
+
 def run_deploy_lifecycle(
     inputs: DeployWorkflowInputs,
     env: Mapping[str, str] | None = None,
@@ -354,9 +450,11 @@ def run_deploy_lifecycle(
     if not selection.should_deploy:
         return 0
 
+    deploy_shared_network_stack(stack_dir=inputs.stack_dir)
     eip_info = find_or_create_eip(ec2_client=ec2_client, name=environment_key)
     deploy_stack(
         stack_dir=inputs.stack_dir,
+        stack_name=inputs.stack_name,
         ami_id=selection.selected_ami_id,
         bootstrap_on_restored_ami=mode.ami_bootstrap,
         eip_allocation_id=eip_info["allocation_id"],

@@ -14,13 +14,16 @@ DOCKER_COMPOSE_RUN := docker compose run --rm \
 	-e AMI_TAG \
 	-e EIP_DESTROY
 
-.PHONY: interactive aws
+.PHONY: interactive aws shared-network-destroy
 
 interactive:
 	$(DOCKER_COMPOSE_RUN) aws bash -lc "cd /home/user && uv run scripts/interactive_workstation.py"
 
 aws:
 	$(DOCKER_COMPOSE_RUN) aws /bin/bash
+
+shared-network-destroy:
+	$(DOCKER_COMPOSE_RUN) aws bash -lc "cd /home/user/gastown && uv run ../scripts/destroy_shared_network.py"
 builder:
 ifeq ($(ACTION),START)
 	$(DOCKER_COMPOSE_RUN) aws bash -lc "cd /home/user/builder && uv run ../scripts/deploy_workstation.py --environment builder --stack-dir /home/user/builder --stack-name BuilderWorkstationStack"

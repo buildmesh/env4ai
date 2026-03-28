@@ -33,14 +33,17 @@ class DeployOrchestrationTests(unittest.TestCase):
             patch("workstation_core.orchestration.make_ec2_client", return_value=Mock()),
             patch("workstation_core.orchestration.resolve_ami_selection", return_value=selection),
             patch("workstation_core.orchestration.find_or_create_eip", return_value=eip_info),
+            patch("workstation_core.orchestration.deploy_shared_network_stack") as deploy_shared_network_stack,
             patch("workstation_core.orchestration.deploy_stack") as deploy_stack,
             patch("workstation_core.orchestration.run_post_deploy_check") as post_check,
         ):
             result = run_deploy_lifecycle(inputs=self._inputs(), env=env, out=io.StringIO())
 
         self.assertEqual(0, result)
+        deploy_shared_network_stack.assert_called_once_with(stack_dir="/tmp/gastown")
         deploy_stack.assert_called_once_with(
             stack_dir="/tmp/gastown",
+            stack_name="GastownWorkstationStack",
             ami_id=None,
             bootstrap_on_restored_ami=False,
             eip_allocation_id="eipalloc-abc123",
@@ -60,12 +63,14 @@ class DeployOrchestrationTests(unittest.TestCase):
         with (
             patch("workstation_core.orchestration.make_ec2_client", return_value=Mock()),
             patch("workstation_core.orchestration.resolve_ami_selection", return_value=selection),
+            patch("workstation_core.orchestration.deploy_shared_network_stack") as deploy_shared_network_stack,
             patch("workstation_core.orchestration.deploy_stack") as deploy_stack,
             patch("workstation_core.orchestration.run_post_deploy_check") as post_check,
         ):
             result = run_deploy_lifecycle(inputs=self._inputs(), env=env, out=io.StringIO())
 
         self.assertEqual(0, result)
+        deploy_shared_network_stack.assert_not_called()
         deploy_stack.assert_not_called()
         post_check.assert_not_called()
 
@@ -80,9 +85,32 @@ class DeployOrchestrationTests(unittest.TestCase):
                 side_effect=RuntimeError("Requested AMI 'gastown_missing' was not found."),
             ),
             patch("workstation_core.orchestration.find_or_create_eip") as find_or_create_eip,
+            patch("workstation_core.orchestration.deploy_shared_network_stack") as deploy_shared_network_stack,
             patch("workstation_core.orchestration.deploy_stack") as deploy_stack,
         ):
             with self.assertRaisesRegex(RuntimeError, "Requested AMI 'gastown_missing' was not found."):
+                run_deploy_lifecycle(inputs=self._inputs(), env=env, out=io.StringIO())
+
+        find_or_create_eip.assert_not_called()
+        deploy_shared_network_stack.assert_not_called()
+        deploy_stack.assert_not_called()
+
+    def test_run_deploy_lifecycle_aborts_environment_deploy_when_shared_network_deploy_fails(self) -> None:
+        """Failure: shared network deploy errors stop the environment deploy flow."""
+        env = {"AWS_REGION": "us-west-2"}
+        selection = Mock(should_deploy=True, selected_ami_id=None)
+
+        with (
+            patch("workstation_core.orchestration.make_ec2_client", return_value=Mock()),
+            patch("workstation_core.orchestration.resolve_ami_selection", return_value=selection),
+            patch("workstation_core.orchestration.find_or_create_eip") as find_or_create_eip,
+            patch(
+                "workstation_core.orchestration.deploy_shared_network_stack",
+                side_effect=RuntimeError("network deploy failed"),
+            ),
+            patch("workstation_core.orchestration.deploy_stack") as deploy_stack,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "network deploy failed"):
                 run_deploy_lifecycle(inputs=self._inputs(), env=env, out=io.StringIO())
 
         find_or_create_eip.assert_not_called()

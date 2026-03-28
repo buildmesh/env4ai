@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import ipaddress
 from typing import Mapping
+
+from workstation_core.config import get_shared_network_config
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +33,7 @@ class EnvironmentSpec:
         display_name: Human-facing title-cased name (for example ``Gastown``).
         bootstrap_files: Ordered init script filenames to concatenate.
         default_ami_selector: Default AMI selector configuration.
+        subnet_cidr: Environment subnet IPv4 CIDR inside the shared VPC.
         instance_type: EC2 instance type for Spot launch.
         volume_size: Root EBS volume size in GiB.
         spot_price: Spot max price as a string (for example ``"0.1"``).
@@ -39,6 +43,7 @@ class EnvironmentSpec:
     display_name: str
     bootstrap_files: tuple[str, ...]
     default_ami_selector: AmiSelectorConfig
+    subnet_cidr: str
     instance_type: str
     volume_size: int
     spot_price: str
@@ -92,6 +97,8 @@ def validate_environment_spec(spec: EnvironmentSpec) -> None:
         raise ValueError("EnvironmentSpec.bootstrap_files must contain at least one file.")
     if not spec.instance_type.strip():
         raise ValueError("EnvironmentSpec.instance_type must be non-empty.")
+    if not spec.subnet_cidr.strip():
+        raise ValueError("EnvironmentSpec.subnet_cidr must be non-empty.")
     if spec.volume_size <= 0:
         raise ValueError("EnvironmentSpec.volume_size must be greater than 0.")
     if not spec.spot_price.strip():
@@ -102,3 +109,15 @@ def validate_environment_spec(spec: EnvironmentSpec) -> None:
         raise ValueError("AmiSelectorConfig.name must be non-empty.")
     if not spec.default_ami_selector.filters:
         raise ValueError("AmiSelectorConfig.filters must be non-empty.")
+
+    try:
+        subnet_network = ipaddress.IPv4Network(spec.subnet_cidr, strict=True)
+    except ValueError as exc:
+        raise ValueError("EnvironmentSpec.subnet_cidr must be a valid IPv4 CIDR block.") from exc
+
+    shared_network = ipaddress.IPv4Network(get_shared_network_config().vpc_cidr, strict=True)
+    if not subnet_network.subnet_of(shared_network):
+        raise ValueError(
+            "EnvironmentSpec.subnet_cidr must fit within the shared VPC CIDR "
+            f"{shared_network.with_prefixlen}."
+        )
