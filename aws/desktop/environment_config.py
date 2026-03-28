@@ -9,6 +9,8 @@ _ENVIRONMENT_SPEC = EnvironmentSpec(
         "gui.sh",
         "brave.sh",
         "libreoffice.sh",
+        "nodejs.sh",
+        "agents.sh",
     ),
     default_ami_selector=AmiSelectorConfig(
         owner="099720109477",
