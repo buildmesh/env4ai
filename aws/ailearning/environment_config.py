@@ -8,6 +8,7 @@ _ENVIRONMENT_SPEC = EnvironmentSpec(
     bootstrap_files=(
         "deps.sh",
         "python.sh",
+        "nodejs.sh",
         "agents.sh",
         "tools.sh"
     ),

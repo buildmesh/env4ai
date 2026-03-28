@@ -1,1 +1,1 @@
-sudo -u ubuntu -H bash -lc 'mkdir -p /home/ubuntu/vault/tools/playwright-fetch && cd /home/ubuntu/vault/tools/playwright-fetch && npm init -y && npm install --save-dev playwright@1.58.2 && npx playwright install chromium --with-deps'
+sudo -u ubuntu -H bash -lc 'mkdir -p /home/ubuntu/vault/tools/playwright-fetch && cd /home/ubuntu/vault/tools/playwright-fetch && . "/home/ubuntu/.nvm/nvm.sh" && npm init -y && npm install --save-dev playwright@1.58.2 && npx playwright install chromium --with-deps'
