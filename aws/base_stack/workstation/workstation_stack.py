@@ -27,6 +27,7 @@ class WorkstationStack(Stack):
         ami_source: Literal["default", "selected"] | None = None,
         selected_ami_id: str | None = None,
         bootstrap_on_restored_ami: bool = False,
+        verbose_bootstrap_resolution: bool = False,
         eip_allocation_id: str | None = None,
         environment_spec: EnvironmentSpec = ENVIRONMENT_SPEC,
         **kwargs,
@@ -42,6 +43,7 @@ class WorkstationStack(Stack):
                 ``ami_id_override`` behavior is preserved.
             selected_ami_id: Explicit AMI ID when using selected source mode.
             bootstrap_on_restored_ami: Opt-in to run full bootstrap for restored AMIs.
+            verbose_bootstrap_resolution: Print resolved bootstrap script paths.
             eip_allocation_id: Optional Elastic IP allocation ID to track in stack outputs.
             environment_spec: Canonical environment configuration and naming source.
             **kwargs: Additional ``Stack`` keyword args.
@@ -147,6 +149,7 @@ class WorkstationStack(Stack):
             volume_size=environment_spec.volume_size,
             include_bootstrap_user_data=should_include_bootstrap,
             bootstrap_files=environment_spec.bootstrap_files,
+            verbose_bootstrap_resolution=verbose_bootstrap_resolution,
         )
 
         # Spot Fleet Request

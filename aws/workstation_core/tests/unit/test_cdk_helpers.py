@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import os
 from pathlib import Path
 import tempfile
 import unittest
 from unittest import mock
 
-from workstation_core import AmiSelectorConfig, EnvironmentSpec
 from workstation_core.cdk_helpers import (
     build_bootstrap_user_data,
     build_spot_fleet_launch_specification,
     resolve_ami_id,
     resolve_subnet_availability_zone,
 )
+from workstation_core.environment_config import AmiSelectorConfig, EnvironmentSpec
 
 
 class CdkHelpersTests(unittest.TestCase):
@@ -40,19 +42,105 @@ class CdkHelpersTests(unittest.TestCase):
     def test_build_bootstrap_user_data_concatenates_files_in_order(self) -> None:
         """Expected: bootstrap helper concatenates and base64-encodes init scripts."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            init_dir = Path(tmpdir) / "init"
-            init_dir.mkdir()
+            environment_dir = Path(tmpdir) / "aws" / "gastown"
+            init_dir = environment_dir / "init"
+            init_dir.mkdir(parents=True)
             (init_dir / "deps.sh").write_text("one\n", encoding="utf-8")
             (init_dir / "build.sh").write_text("two\n", encoding="utf-8")
 
             original_cwd = os.getcwd()
             try:
-                os.chdir(tmpdir)
+                os.chdir(environment_dir)
                 encoded = build_bootstrap_user_data(("deps.sh", "build.sh"))
             finally:
                 os.chdir(original_cwd)
 
         self.assertEqual("b25lCnR3bwo=", encoded)
+
+    def test_build_bootstrap_user_data_falls_back_to_shared_scripts(self) -> None:
+        """Edge: shared init scripts are used when the environment-local file is absent."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            environment_dir = Path(tmpdir) / "aws" / "gastown"
+            local_init_dir = environment_dir / "init"
+            shared_init_dir = Path(tmpdir) / "aws" / "common" / "init"
+            local_init_dir.mkdir(parents=True)
+            shared_init_dir.mkdir(parents=True)
+            (local_init_dir / "deps.sh").write_text("one\n", encoding="utf-8")
+            (shared_init_dir / "build.sh").write_text("two\n", encoding="utf-8")
+
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(environment_dir)
+                encoded = build_bootstrap_user_data(("deps.sh", "build.sh"))
+            finally:
+                os.chdir(original_cwd)
+
+        self.assertEqual("b25lCnR3bwo=", encoded)
+
+    def test_build_bootstrap_user_data_prefers_local_script_and_logs_collision(self) -> None:
+        """Edge: local init scripts override shared ones and collisions are reported."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            environment_dir = Path(tmpdir) / "aws" / "gastown"
+            local_init_dir = environment_dir / "init"
+            shared_init_dir = Path(tmpdir) / "aws" / "common" / "init"
+            local_init_dir.mkdir(parents=True)
+            shared_init_dir.mkdir(parents=True)
+            (local_init_dir / "agents.sh").write_text("local\n", encoding="utf-8")
+            (shared_init_dir / "agents.sh").write_text("shared\n", encoding="utf-8")
+
+            original_cwd = os.getcwd()
+            output = io.StringIO()
+            try:
+                os.chdir(environment_dir)
+                with contextlib.redirect_stdout(output):
+                    encoded = build_bootstrap_user_data(("agents.sh",))
+            finally:
+                os.chdir(original_cwd)
+
+        self.assertEqual("bG9jYWwK", encoded)
+        self.assertIn("found in both", output.getvalue())
+        self.assertIn("using", output.getvalue())
+
+    def test_build_bootstrap_user_data_prints_resolution_when_verbose_enabled(self) -> None:
+        """Expected: verbose mode prints the resolved path for each bootstrap script."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            environment_dir = Path(tmpdir) / "aws" / "gastown"
+            local_init_dir = environment_dir / "init"
+            local_init_dir.mkdir(parents=True)
+            script_path = local_init_dir / "deps.sh"
+            script_path.write_text("one\n", encoding="utf-8")
+
+            original_cwd = os.getcwd()
+            output = io.StringIO()
+            try:
+                os.chdir(environment_dir)
+                with contextlib.redirect_stdout(output):
+                    build_bootstrap_user_data(("deps.sh",), verbose_resolution=True)
+            finally:
+                os.chdir(original_cwd)
+
+        self.assertIn("bootstrap: deps.sh ->", output.getvalue())
+        self.assertIn(str(script_path), output.getvalue())
+
+    def test_build_bootstrap_user_data_raises_clear_error_when_script_is_missing(self) -> None:
+        """Failure: missing bootstrap scripts report all searched locations."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            environment_dir = Path(tmpdir) / "aws" / "gastown"
+            (environment_dir / "init").mkdir(parents=True)
+
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(environment_dir)
+                with self.assertRaisesRegex(
+                    FileNotFoundError,
+                    "missing.sh",
+                ) as exc_info:
+                    build_bootstrap_user_data(("missing.sh",))
+            finally:
+                os.chdir(original_cwd)
+
+        self.assertIn(str(environment_dir / "init" / "missing.sh"), str(exc_info.exception))
+        self.assertIn(str(Path(tmpdir) / "aws" / "common" / "init" / "missing.sh"), str(exc_info.exception))
 
     def test_build_launch_spec_omits_user_data_when_disabled(self) -> None:
         """Edge: launch spec excludes userData when bootstrap is disabled."""

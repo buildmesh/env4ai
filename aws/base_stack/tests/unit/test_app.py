@@ -80,6 +80,7 @@ class AppResolverTests(unittest.TestCase):
             ENVIRONMENT_SPEC.stack_name,
             ami_id_override=None,
             bootstrap_on_restored_ami=False,
+            verbose_bootstrap_resolution=False,
             eip_allocation_id=None,
             environment_spec=ENVIRONMENT_SPEC,
             env=environment_obj,
@@ -108,6 +109,36 @@ class AppResolverTests(unittest.TestCase):
             ENVIRONMENT_SPEC.stack_name,
             ami_id_override="ami-override123",
             bootstrap_on_restored_ami=False,
+            verbose_bootstrap_resolution=False,
+            eip_allocation_id=None,
+            environment_spec=ENVIRONMENT_SPEC,
+            env=environment_obj,
+        )
+        app_instance.synth.assert_called_once()
+
+    def test_main_enables_verbose_bootstrap_resolution_from_context(self) -> None:
+        """Expected: verbose bootstrap context is parsed and passed to the stack."""
+        app_instance = Mock()
+        app_instance.node.try_get_context.side_effect = (
+            lambda key: "true" if key == "verbose_bootstrap_resolution" else None
+        )
+        environment_obj = Mock()
+
+        with (
+            patch("app.cdk.App", return_value=app_instance),
+            patch("app.cdk.Environment", return_value=environment_obj),
+            patch("app.get_account", return_value="111111111111"),
+            patch("app.get_region", return_value="us-west-2"),
+            patch("app.WorkstationStack") as stack_mock,
+        ):
+            base_app.main()
+
+        stack_mock.assert_called_once_with(
+            app_instance,
+            ENVIRONMENT_SPEC.stack_name,
+            ami_id_override=None,
+            bootstrap_on_restored_ami=False,
+            verbose_bootstrap_resolution=True,
             eip_allocation_id=None,
             environment_spec=ENVIRONMENT_SPEC,
             env=environment_obj,

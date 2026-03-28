@@ -80,18 +80,70 @@ def resolve_subnet_availability_zone(availability_zone_index: int = 0) -> str:
     return Fn.select(availability_zone_index, Fn.get_azs())
 
 
-def build_bootstrap_user_data(bootstrap_files: tuple[str, ...]) -> str:
+def _resolve_bootstrap_script_path(filename: str, *, verbose_resolution: bool = False) -> Path:
+    """Resolve a bootstrap script from environment-local or shared init paths.
+
+    Args:
+        filename: Bootstrap script filename declared in ``EnvironmentSpec``.
+        verbose_resolution: Whether to print the resolved path for each script.
+
+    Returns:
+        Absolute path to the selected bootstrap script.
+
+    Raises:
+        FileNotFoundError: If the script is absent from both search locations.
+    """
+    environment_dir = Path.cwd().resolve()
+    local_script_path = environment_dir / "init" / filename
+    shared_script_path = environment_dir.parent / "common" / "init" / filename
+
+    local_exists = local_script_path.is_file()
+    shared_exists = shared_script_path.is_file()
+
+    if local_exists and shared_exists:
+        print(
+            "bootstrap: "
+            f"{filename} found in both {local_script_path} and {shared_script_path}; "
+            f"using {local_script_path}"
+        )
+        return local_script_path
+
+    if local_exists:
+        if verbose_resolution:
+            print(f"bootstrap: {filename} -> {local_script_path}")
+        return local_script_path
+
+    if shared_exists:
+        if verbose_resolution:
+            print(f"bootstrap: {filename} -> {shared_script_path}")
+        return shared_script_path
+
+    raise FileNotFoundError(
+        f"Bootstrap script '{filename}' was not found. "
+        f"Searched: {local_script_path}, {shared_script_path}"
+    )
+
+
+def build_bootstrap_user_data(
+    bootstrap_files: tuple[str, ...],
+    *,
+    verbose_resolution: bool = False,
+) -> str:
     """Build a base64-encoded userData script from ordered init files.
 
     Args:
         bootstrap_files: Ordered init script filenames to concatenate.
+        verbose_resolution: Whether to print resolved bootstrap script paths.
 
     Returns:
         Base64-encoded bootstrap script payload.
     """
     user_data_script = ""
     for filename in bootstrap_files:
-        script_path = Path("init") / filename
+        script_path = _resolve_bootstrap_script_path(
+            filename,
+            verbose_resolution=verbose_resolution,
+        )
         user_data_script += script_path.read_text(encoding="utf-8")
     return base64.b64encode(user_data_script.encode("utf-8")).decode("utf-8")
 
@@ -143,6 +195,7 @@ def build_spot_fleet_launch_specification(
     volume_size: int,
     include_bootstrap_user_data: bool,
     bootstrap_files: tuple[str, ...],
+    verbose_bootstrap_resolution: bool = False,
 ) -> dict[str, object]:
     """Build a reusable Spot Fleet launch specification payload.
 
@@ -154,6 +207,7 @@ def build_spot_fleet_launch_specification(
         volume_size: Root volume size in GiB.
         include_bootstrap_user_data: Whether to include bootstrap scripts.
         bootstrap_files: Ordered init script filenames.
+        verbose_bootstrap_resolution: Whether to print resolved bootstrap paths.
 
     Returns:
         Launch specification payload compatible with CDK Spot Fleet constructs.
@@ -177,5 +231,8 @@ def build_spot_fleet_launch_specification(
         ],
     }
     if include_bootstrap_user_data:
-        launch_specification["user_data"] = build_bootstrap_user_data(bootstrap_files)
+        launch_specification["user_data"] = build_bootstrap_user_data(
+            bootstrap_files,
+            verbose_resolution=verbose_bootstrap_resolution,
+        )
     return launch_specification

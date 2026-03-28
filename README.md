@@ -58,6 +58,12 @@ AMI names use the format `<environment>_<tag>` (for example `gastown_20260301`).
 
 > **Note:** AWS creates `aws-ec2-spot-fleet-tagging-role` automatically the first time Spot Fleet needs it.
 
+Bootstrap script lookup order:
+- `aws/<environment>/init/<script>`
+- `aws/common/init/<script>`
+
+If the same script exists in both places, the environment-local copy wins and deploy output prints a collision message showing which file was used.
+
 ---
 
 ## Advanced: Non-Interactive Workflows
@@ -113,6 +119,12 @@ To open a shell inside the Docker container with AWS/CDK tooling directly:
 make aws
 ```
 
+To print where each bootstrap script resolves during `cdk deploy`, pass:
+
+```bash
+cdk deploy -c verbose_bootstrap_resolution=true
+```
+
 ---
 
 ## Notes
@@ -128,6 +140,7 @@ make aws
 - `docker-compose.yaml` - local container + AWS config mount + secrets wiring
 - `aws/gastown/` - CDK app, stack, init scripts, and tests
 - `aws/builder/` - CDK app, stack, init scripts, and tests
+- `aws/common/init/` - shared bootstrap scripts reused across environments
 - `aws/workstation_core/` - shared package for cross-environment workstation contracts/helpers
   - includes canonical `EnvironmentSpec` model used to derive stack/logical naming consistently
 - `aws/iam/gastown/` - IAM policy files

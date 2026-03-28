@@ -32,6 +32,13 @@ def main() -> None:
             value=bootstrap_on_restored_context,
             context_key="bootstrap_on_restored_ami",
         )
+    verbose_bootstrap_context = app.node.try_get_context("verbose_bootstrap_resolution")
+    verbose_bootstrap_resolution = False
+    if verbose_bootstrap_context is not None:
+        verbose_bootstrap_resolution = parse_optional_bool_context(
+            value=verbose_bootstrap_context,
+            context_key="verbose_bootstrap_resolution",
+        )
     eip_allocation_id = parse_optional_text_context(app.node.try_get_context("eip_allocation_id"))
 
     WorkstationStack(
@@ -39,6 +46,7 @@ def main() -> None:
         ENVIRONMENT_SPEC.stack_name,
         ami_id_override=ami_id_override,
         bootstrap_on_restored_ami=bootstrap_on_restored_ami,
+        verbose_bootstrap_resolution=verbose_bootstrap_resolution,
         eip_allocation_id=eip_allocation_id,
         environment_spec=ENVIRONMENT_SPEC,
         env=cdk.Environment(account=get_account(), region=get_region()),
