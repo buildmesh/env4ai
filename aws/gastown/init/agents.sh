@@ -15,6 +15,10 @@ sudo -E npm i -g @openai/codex
 log "Installing Claude Code..."
 curl -fsSL https://claude.ai/install.sh | bash
 
+# Install OpenCode
+log "Installing OpenCode..."
+npm i -g opencode-ai
+
 # Install Beads
 log "Installing Beads..."
 export CGO_ENABLED=1
