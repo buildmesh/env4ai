@@ -28,7 +28,7 @@ from workstation_core.cdk_helpers import (
     resolve_ami_id,
     resolve_subnet_availability_zone,
 )
-from workstation_core.config import CoreConfig
+from workstation_core.config import CoreConfig, SharedNetworkConfig, get_shared_network_config
 from workstation_core.environment_config import (
     AmiSelectorConfig,
     EnvironmentSpec,
@@ -39,7 +39,9 @@ from workstation_core.orchestration import (
     OrchestrationPlan,
     StopOrchestrationInputs,
     build_stop_image_name,
+    deploy_shared_network_stack,
     deploy_stack,
+    destroy_shared_network_stack,
     load_environment_spec,
     make_ec2_client,
     parse_stop_ami_config,
@@ -94,13 +96,17 @@ __all__ = [
     "DeployWorkflowInputs",
     "EnvironmentSpec",
     "OrchestrationPlan",
+    "SharedNetworkConfig",
     "StopOrchestrationInputs",
     "RuntimeContext",
     "build_ami_lookup_error_message",
     "build_bootstrap_user_data",
     "build_spot_fleet_launch_specification",
     "build_stack_name",
+    "deploy_shared_network_stack",
     "deploy_stack",
+    "destroy_shared_network_stack",
+    "get_shared_network_config",
     "resolve_ami_id",
     "resolve_subnet_availability_zone",
     "validate_environment_spec",

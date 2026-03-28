@@ -18,6 +18,36 @@ class CoreConfig:
     stack_prefix: str
 
 
+@dataclass(frozen=True, slots=True)
+class SharedNetworkConfig:
+    """Canonical configuration for the shared workstation network stack.
+
+    Args:
+        stack_name: CloudFormation stack name for the shared network.
+        vpc_name: Name tag applied to the shared VPC.
+        igw_name: Name tag applied to the shared Internet Gateway.
+        vpc_cidr: IPv4 CIDR block allocated to the shared VPC.
+    """
+
+    stack_name: str
+    vpc_name: str
+    igw_name: str
+    vpc_cidr: str
+
+
+_SHARED_NETWORK_CONFIG = SharedNetworkConfig(
+    stack_name="Env4aiNetworkStack",
+    vpc_name="env4ai",
+    igw_name="env4ai",
+    vpc_cidr="10.0.0.0/16",
+)
+
+
+def get_shared_network_config() -> SharedNetworkConfig:
+    """Return the canonical shared network configuration."""
+    return _SHARED_NETWORK_CONFIG
+
+
 def validate_config(config: CoreConfig) -> None:
     """Validate a ``CoreConfig`` for required non-empty fields.
 

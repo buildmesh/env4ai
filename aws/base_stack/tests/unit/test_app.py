@@ -71,13 +71,21 @@ class AppResolverTests(unittest.TestCase):
             patch("app.cdk.Environment", return_value=environment_obj),
             patch("app.get_account", return_value="111111111111"),
             patch("app.get_region", return_value="us-west-2"),
+            patch("app.Env4aiNetworkStack", return_value=Mock(vpc="vpc", internet_gateway=Mock(ref="igw"))) as network_stack_mock,
             patch("app.WorkstationStack") as stack_mock,
         ):
             base_app.main()
 
+        network_stack_mock.assert_called_once_with(
+            app_instance,
+            "Env4aiNetworkStack",
+            env=environment_obj,
+        )
         stack_mock.assert_called_once_with(
             app_instance,
             ENVIRONMENT_SPEC.stack_name,
+            shared_vpc="vpc",
+            shared_igw_id="igw",
             ami_id_override=None,
             bootstrap_on_restored_ami=False,
             verbose_bootstrap_resolution=False,
@@ -100,6 +108,7 @@ class AppResolverTests(unittest.TestCase):
             patch("app.cdk.Environment", return_value=environment_obj),
             patch("app.get_account", return_value="111111111111"),
             patch("app.get_region", return_value="us-west-2"),
+            patch("app.Env4aiNetworkStack", return_value=Mock(vpc="vpc", internet_gateway=Mock(ref="igw"))),
             patch("app.WorkstationStack") as stack_mock,
         ):
             base_app.main()
@@ -107,6 +116,8 @@ class AppResolverTests(unittest.TestCase):
         stack_mock.assert_called_once_with(
             app_instance,
             ENVIRONMENT_SPEC.stack_name,
+            shared_vpc="vpc",
+            shared_igw_id="igw",
             ami_id_override="ami-override123",
             bootstrap_on_restored_ami=False,
             verbose_bootstrap_resolution=False,
@@ -129,6 +140,7 @@ class AppResolverTests(unittest.TestCase):
             patch("app.cdk.Environment", return_value=environment_obj),
             patch("app.get_account", return_value="111111111111"),
             patch("app.get_region", return_value="us-west-2"),
+            patch("app.Env4aiNetworkStack", return_value=Mock(vpc="vpc", internet_gateway=Mock(ref="igw"))),
             patch("app.WorkstationStack") as stack_mock,
         ):
             base_app.main()
@@ -136,6 +148,8 @@ class AppResolverTests(unittest.TestCase):
         stack_mock.assert_called_once_with(
             app_instance,
             ENVIRONMENT_SPEC.stack_name,
+            shared_vpc="vpc",
+            shared_igw_id="igw",
             ami_id_override=None,
             bootstrap_on_restored_ami=False,
             verbose_bootstrap_resolution=True,

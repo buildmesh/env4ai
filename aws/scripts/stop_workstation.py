@@ -171,7 +171,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             image_id=image_id,
         ),
         destroy_stack=lambda: run_command(
-            ["uv", "run", "cdk", "destroy", "--force"],
+            ["uv", "run", "cdk", "destroy", "--force", args.stack_name],
             cwd=args.stack_dir,
             timeout_seconds=DESTROY_TIMEOUT_SECONDS,
         ),

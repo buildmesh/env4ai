@@ -12,6 +12,7 @@ sys.path.insert(0, _APP_DIR)  # finds workstation/ in base_stack/
 sys.path.insert(0, os.getcwd())  # finds environment_config.py in the env dir (higher priority)
 
 from environment_config import ENVIRONMENT_SPEC
+from workstation.env4ai_network_stack import Env4aiNetworkStack
 from workstation.workstation_stack import WorkstationStack
 from workstation_core.runtime_resolution import (
     get_account,
@@ -40,17 +41,26 @@ def main() -> None:
             context_key="verbose_bootstrap_resolution",
         )
     eip_allocation_id = parse_optional_text_context(app.node.try_get_context("eip_allocation_id"))
+    env = cdk.Environment(account=get_account(), region=get_region())
+    network_stack = Env4aiNetworkStack(
+        app,
+        "Env4aiNetworkStack",
+        env=env,
+    )
 
-    WorkstationStack(
+    workstation_stack = WorkstationStack(
         app,
         ENVIRONMENT_SPEC.stack_name,
+        shared_vpc=network_stack.vpc,
+        shared_igw_id=network_stack.internet_gateway.ref,
         ami_id_override=ami_id_override,
         bootstrap_on_restored_ami=bootstrap_on_restored_ami,
         verbose_bootstrap_resolution=verbose_bootstrap_resolution,
         eip_allocation_id=eip_allocation_id,
         environment_spec=ENVIRONMENT_SPEC,
-        env=cdk.Environment(account=get_account(), region=get_region()),
+        env=env,
     )
+    workstation_stack.add_dependency(network_stack)
     app.synth()
 
 

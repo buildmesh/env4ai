@@ -7,6 +7,7 @@ from workstation_core import (
     OrchestrationPlan,
     RuntimeContext,
     build_stack_name,
+    get_shared_network_config,
     validate_plan,
 )
 from workstation_core.config import validate_config
@@ -37,11 +38,16 @@ class WorkstationCoreContractTests(unittest.TestCase):
     def test_helpers_trim_inputs_for_stack_and_runtime_summary(self) -> None:
         """Edge: helper functions handle trimmed input values consistently."""
         stack_name = build_stack_name(stack_prefix=" workstation ", environment=" gastown ")
+        shared_network = get_shared_network_config()
         runtime_summary = describe_runtime(
             RuntimeContext(account_id="111111111111", profile_name=" default ", dry_run=True)
         )
 
         self.assertEqual(stack_name, "workstation-gastown")
+        self.assertEqual(shared_network.stack_name, "Env4aiNetworkStack")
+        self.assertEqual(shared_network.vpc_name, "env4ai")
+        self.assertEqual(shared_network.igw_name, "env4ai")
+        self.assertEqual(shared_network.vpc_cidr, "10.0.0.0/16")
         self.assertIn("mode=dry-run", runtime_summary)
 
     def test_validation_rejects_empty_required_fields(self) -> None:

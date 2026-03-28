@@ -2,6 +2,14 @@
 
 This repository helps developers spin up reproducible EC2 workstations for AI tooling.
 
+## Shared Network Model
+
+All workstation environments now deploy into one shared VPC and one shared Internet Gateway owned by `Env4aiNetworkStack`.
+
+- Environment deploy automatically deploys or updates `Env4aiNetworkStack` first.
+- Environment destroy removes only the selected workstation stack and leaves the shared network intact.
+- Shared-network teardown is a separate operator command and is blocked while any workstation stacks still exist.
+
 ## Available Environments
 
 - `gastown`: [Gas Town](https://github.com/steveyegge/gastown), preconfigured with dependencies so it is usable out of the box.
@@ -94,7 +102,7 @@ Run `make` to open the interactive workstation lifecycle menu. The menu auto-dis
 | **Deploy with default AMI** | Provisions a new EC2 workstation using the environment's standard base image |
 | **Deploy with AMI list + pick** | Lists your saved AMIs for this environment, lets you choose one, then deploys |
 | **Save current state as AMI** | Snapshots your running workstation to a named AMI for later restore |
-| **Destroy stack** | Tears down the running workstation and all associated resources |
+| **Destroy stack** | Tears down the running workstation resources while leaving the shared network intact |
 | **Destroy stack + save AMI first** | Saves an AMI snapshot, then destroys — preserves state before shutting down |
 | **Refresh status** | Re-checks live stack status from AWS |
 | **Switch environment** | Changes the active environment (e.g. from `gastown` to `builder`) |
@@ -126,6 +134,9 @@ make builder
 # Destroy
 make gastown ACTION=STOP
 make builder ACTION=STOP
+
+# Destroy shared network after all workstation stacks are gone
+make shared-network-destroy
 ```
 
 ### AMI lifecycle
@@ -145,6 +156,7 @@ AMI_LOAD=20260301 AMI_BOOTSTRAP=1 make gastown
 ```
 
 **Behavior notes:**
+- Every deploy ensures `Env4aiNetworkStack` exists before the environment stack is deployed.
 - `AMI_LOAD` and `AMI_LIST` are mutually exclusive; invalid combinations fail fast.
 - `AMI_PICK=1` is only valid with `AMI_LIST=1`.
 - AMI list/load modes run an IAM preflight and fail early with remediation if `ec2:DescribeImages` is missing.
@@ -177,6 +189,7 @@ cdk deploy -c verbose_bootstrap_resolution=true
 
 - Region is read from `~/.aws/config` (active profile).
 - Region/account can be overridden with options/environment variables (for example `CDK_DEFAULT_REGION`, `CDK_DEFAULT_ACCOUNT`, and `--region` where supported by scripts/commands).
+- The shared `env4ai` VPC uses `10.0.0.0/16`; each environment must define a unique `subnet_cidr` inside that range.
 - SSH is currently open on port 22 to anywhere (`0.0.0.0/0`); restrict this before broader use.
 - Costs apply while infrastructure is running.
 
@@ -187,6 +200,7 @@ cdk deploy -c verbose_bootstrap_resolution=true
 - `aws/gastown/` - CDK app, stack, init scripts, and tests
 - `aws/builder/` - CDK app, stack, init scripts, and tests
 - `aws/common/init/` - shared bootstrap scripts reused across environments
+- `aws/scripts/destroy_shared_network.py` - explicit shared-network teardown command with preflight checks
 - `aws/workstation_core/` - shared package for cross-environment workstation contracts/helpers
   - includes canonical `EnvironmentSpec` model used to derive stack/logical naming consistently
 - `aws/iam/gastown/` - IAM policy files
@@ -201,6 +215,7 @@ Use `aws/workstation_core` as the single source of truth and only keep environme
    - `display_name` (for CloudFormation/construct naming)
    - `bootstrap_files`
    - `default_ami_selector`
+   - `subnet_cidr` (unique subnet inside the shared `10.0.0.0/16` VPC)
    - `instance_type`, `volume_size`, `spot_price`
 3. Keep naming derived from the spec properties instead of hardcoded literals:
    - Stack name: `ENVIRONMENT_SPEC.stack_name`
@@ -209,6 +224,7 @@ Use `aws/workstation_core` as the single source of truth and only keep environme
 4. Wire the target in `Makefile` using the shared scripts pattern used by `gastown`:
    - Start/deploy: `cd /home/user/<env> && uv run ../scripts/deploy_workstation.py --environment <env> --stack-dir /home/user/<env> --stack-name <DisplayName>WorkstationStack`
    - Stop/destroy: `cd /home/user/<env> && uv run ../scripts/stop_workstation.py --environment <env> --stack-dir /home/user/<env> --stack-name <DisplayName>WorkstationStack`
+   - Shared-network destroy: `cd /home/user/gastown && uv run ../scripts/destroy_shared_network.py`
 5. Validate AMI lifecycle behavior for the new environment:
    - List only: `AMI_LIST=1 make <env>`
    - Load exact AMI name: `AMI_LOAD=20260301 make <env>` (resolves `<env>_20260301`)

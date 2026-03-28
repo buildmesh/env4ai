@@ -23,6 +23,8 @@ class WorkstationStack(Stack):
         self,
         scope: Construct,
         construct_id: str,
+        shared_vpc: ec2.IVpc,
+        shared_igw_id: str,
         availability_zone_index: int = 0,
         ami_id_override: str | None = None,
         ami_source: Literal["default", "selected"] | None = None,
@@ -46,6 +48,8 @@ class WorkstationStack(Stack):
             bootstrap_on_restored_ami: Opt-in to run full bootstrap for restored AMIs.
             verbose_bootstrap_resolution: Print resolved bootstrap script paths.
             eip_allocation_id: Optional Elastic IP allocation ID to track in stack outputs.
+            shared_vpc: Shared VPC imported from ``Env4aiNetworkStack``.
+            shared_igw_id: Shared Internet Gateway id from ``Env4aiNetworkStack``.
             environment_spec: Canonical environment configuration and naming source.
             **kwargs: Additional ``Stack`` keyword args.
         """
@@ -59,34 +63,24 @@ class WorkstationStack(Stack):
                 description="Elastic IP allocation ID associated with this workstation.",
             )
 
-        # Create a new VPC using environment-derived naming.
-        vpc = ec2.Vpc(self, environment_spec.construct_id("VPC"),
-            max_azs=1,
-            subnet_configuration=[]
-        )
-
-        igw = ec2.CfnInternetGateway(self, environment_spec.construct_id("IGW"))
-        ec2.CfnVPCGatewayAttachment(
-            self,
-            environment_spec.construct_id("IGWAttachment"),
-            vpc_id=vpc.vpc_id,
-            internet_gateway_id=igw.ref,
-        )
-
         local_zone_subnet = ec2.CfnSubnet(self, environment_spec.construct_id("Subnet"),
             availability_zone=resolve_subnet_availability_zone(availability_zone_index),
-            cidr_block="10.0.100.0/24",
-            vpc_id=vpc.vpc_id,
+            cidr_block=environment_spec.subnet_cidr,
+            vpc_id=shared_vpc.vpc_id,
             map_public_ip_on_launch=True
         )
 
-        route_table = ec2.CfnRouteTable(self, environment_spec.construct_id("RouteTable"), vpc_id=vpc.vpc_id)
+        route_table = ec2.CfnRouteTable(
+            self,
+            environment_spec.construct_id("RouteTable"),
+            vpc_id=shared_vpc.vpc_id,
+        )
         ec2.CfnRoute(
             self,
             environment_spec.construct_id("DefaultRoute"),
             route_table_id=route_table.ref,
             destination_cidr_block="0.0.0.0/0",
-            gateway_id=igw.ref,
+            gateway_id=shared_igw_id,
         )
         ec2.CfnSubnetRouteTableAssociation(
             self,
@@ -96,7 +90,7 @@ class WorkstationStack(Stack):
         )
 
         # Security group for SSH (VNC tunneled over SSH)
-        sg = ec2.SecurityGroup(self, environment_spec.construct_id("SG"), vpc=vpc)
+        sg = ec2.SecurityGroup(self, environment_spec.construct_id("SG"), vpc=shared_vpc)
         sg.add_ingress_rule(ec2.Peer.any_ipv4(), ec2.Port.tcp(22), "Allow SSH")
 
         # Reason: preserve ``ami_id_override`` compatibility while supporting the
