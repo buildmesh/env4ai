@@ -24,19 +24,19 @@ log "Extracting..."
 tar -xzf "${ASSET}"
 
 log "Installing to /usr/local/bin..."
-sudo install -m 0755 ./uv*/uv /usr/local/bin/uv
+install -m 0755 ./uv*/uv /usr/local/bin/uv
 
 # uvx is bundled in newer releases; install if present
 if ls ./uv*/uvx >/dev/null 2>&1; then
-  sudo install -m 0755 ./uv*/uvx /usr/local/bin/uvx
+  install -m 0755 ./uv*/uvx /usr/local/bin/uvx
 fi
 
 log "uv version:"
 uv --version
 
 log "Installing Python ${PYTHON_VERSION} with uv..."
-uv python install ${PYTHON_VERSION}
+sudo -u ubuntu -H -E bash -lc 'cd /tmp && uv python install ${PYTHON_VERSION}'
 
 log "Installed Python versions:"
-uv python list
+sudo -u ubuntu -H -E bash -lc 'cd /tmp && uv python list'
 
