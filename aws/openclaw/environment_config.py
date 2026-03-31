@@ -7,6 +7,7 @@ _ENVIRONMENT_SPEC = EnvironmentSpec(
     display_name="OpenClaw",
     bootstrap_files=(
         "deps.sh",
+        "nodejs.sh",
         "agents.sh",
         "docker.sh",
         "openclaw.sh",

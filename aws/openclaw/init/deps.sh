@@ -31,24 +31,6 @@ sudo -E apt-get install -y --no-install-recommends \
     build-essential
 
 # ------------------------------------------------------------
-# NodeJS
-# ------------------------------------------------------------
-log "Installing nodejs, npm..."
-
-curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
-  | sudo gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" \
-  | sudo tee /etc/apt/sources.list.d/nodesource.list > /dev/null
-
-if ! sudo -E apt-get update -y; then
-  echo "apt-get update failed; retrying with gzip indexes (Acquire::CompressionTypes::Order::=gz)..." >&2
-  sudo -E apt-get update -y -o Acquire::CompressionTypes::Order::=gz
-fi
-sudo -E apt-get install -y nodejs
-node -v
-npm -v
-
-# ------------------------------------------------------------
 # Go
 # ------------------------------------------------------------
 log "Installing Go..."

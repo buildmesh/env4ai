@@ -37,7 +37,9 @@ apt-get install -y --no-install-recommends \
 systemctl enable --now docker
 
 # Add ubuntu user to docker group
-usermod -aG docker ubuntu
+if id ubuntu >/dev/null 2>&1; then
+  usermod -aG docker ubuntu
+fi
 
 apt-get clean
 rm -rf /var/lib/apt/lists/*
