@@ -1,5 +1,6 @@
 from aws_cdk import (
     CfnOutput,
+    CfnTag,
     Stack,
     aws_ec2 as ec2,
     aws_iam as iam,
@@ -151,6 +152,14 @@ class WorkstationStack(Stack):
             bootstrap_files=environment_spec.bootstrap_files,
             verbose_bootstrap_resolution=verbose_bootstrap_resolution,
         )
+        launch_specification["tag_specifications"] = [
+            ec2.CfnSpotFleet.SpotFleetTagSpecificationProperty(
+                resource_type="instance",
+                tags=[
+                    CfnTag(key="Name", value=environment_spec.construct_id("")),
+                ],
+            )
+        ]
 
         # Spot Fleet Request
         ec2.CfnSpotFleet(self, environment_spec.spot_fleet_logical_id,
