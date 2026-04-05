@@ -1,0 +1,42 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CreateSpotServiceLinkedRoles",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": [
+        "arn:aws:iam::*:role/aws-service-role/spot.amazonaws.com/AWSServiceRoleForEC2Spot",
+        "arn:aws:iam::*:role/aws-service-role/spotfleet.amazonaws.com/AWSServiceRoleForEC2SpotFleet"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "iam:AWSServiceName": [
+            "spot.amazonaws.com",
+            "spotfleet.amazonaws.com"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "CreateSpotFleetTaggingRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:GetRole"
+      ],
+      "Resource": "arn:aws:iam::*:role/aws-ec2-spot-fleet-tagging-role"
+    },
+    {
+      "Sid": "AttachSpotFleetTaggingManagedPolicy",
+      "Effect": "Allow",
+      "Action": "iam:AttachRolePolicy",
+      "Resource": "arn:aws:iam::*:role/aws-ec2-spot-fleet-tagging-role",
+      "Condition": {
+        "StringEquals": {
+          "iam:PolicyARN": "arn:aws:iam::aws:policy/service-role/AmazonEC2SpotFleetTaggingRole"
+        }
+      }
+    }
+  ]
+}

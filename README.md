@@ -20,15 +20,21 @@ This repository helps developers spin up reproducible EC2 workstations for AI to
 
    `aws/iam/gastown/deployer-policy.json`
 
-2. Attach that policy to the IAM user used by your local AWS `default` profile.
+2. For the very first env4ai run in an AWS account, also create a second customer-managed IAM policy using:
 
-3. Create an EC2 key pair in **AWS Management Console > EC2 > Network & Security > Key Pairs**:
+   `aws/iam/gastown/first-run-bootstrap-policy.json`
+
+3. Attach `deployer-policy.json` to the IAM user used by your local AWS `default` profile.
+
+4. Attach `first-run-bootstrap-policy.json` to that same IAM user temporarily, only for the first-run Spot Fleet bootstrap described below.
+
+5. Create an EC2 key pair in **AWS Management Console > EC2 > Network & Security > Key Pairs**:
    - Name: `aws_key`
    - Download the private key and place it at:
 
      `~/.ssh/aws_key.pem`
 
-4. Create the account-id secret file (default source for AWS account):
+6. Create the account-id secret file (default source for AWS account):
 
    ```bash
    mkdir -p secrets
@@ -36,6 +42,46 @@ This repository helps developers spin up reproducible EC2 workstations for AI to
    ```
 
    By default this is mounted as Docker secret `aws_acct` at `/run/secrets/aws_acct`. You can override account resolution using options/environment variables (for example `CDK_DEFAULT_ACCOUNT`).
+
+### First-Run Spot Fleet Bootstrap
+
+env4ai deploys Spot Fleet through CDK and the AWS API. In that path, you should not assume AWS will create the required Spot roles for you during a normal deploy.
+
+Before the first successful `make <environment>` run in a new AWS account:
+
+1. Temporarily attach `aws/iam/gastown/first-run-bootstrap-policy.json` to the IAM user that will run env4ai.
+2. Create the Spot service-linked roles once:
+
+   ```bash
+   aws iam create-service-linked-role --aws-service-name spot.amazonaws.com
+   aws iam create-service-linked-role --aws-service-name spotfleet.amazonaws.com
+   ```
+
+3. Create the Spot Fleet tagging role once:
+
+   ```bash
+   aws iam create-role \
+     --role-name aws-ec2-spot-fleet-tagging-role \
+     --assume-role-policy-document '{
+       "Version": "2012-10-17",
+       "Statement": [
+         {
+           "Effect": "Allow",
+           "Principal": {
+             "Service": "spotfleet.amazonaws.com"
+           },
+           "Action": "sts:AssumeRole"
+         }
+       ]
+     }'
+
+   aws iam attach-role-policy \
+     --role-name aws-ec2-spot-fleet-tagging-role \
+     --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEC2SpotFleetTaggingRole
+   ```
+
+4. Run your first deploy.
+5. After the first deploy succeeds, detach `aws/iam/gastown/first-run-bootstrap-policy.json` from the IAM user. Keep `aws/iam/gastown/deployer-policy.json` attached for normal env4ai use.
 
 ## Usage
 
@@ -56,7 +102,7 @@ Run `make` to open the interactive workstation lifecycle menu. The menu auto-dis
 
 AMI names use the format `<environment>_<tag>` (for example `gastown_20260301`). Menu actions are gated by current stack state — deploy is disabled when a stack is already running, and save/destroy are disabled when no stack exists. Destructive actions require explicit confirmation.
 
-> **Note:** AWS creates `aws-ec2-spot-fleet-tagging-role` automatically the first time Spot Fleet needs it.
+> **Note:** env4ai’s deploy path uses CDK/API-based Spot Fleet provisioning. Complete the one-time Spot Fleet bootstrap in [First-Run Spot Fleet Bootstrap](#first-run-spot-fleet-bootstrap) before the first deploy in a new AWS account.
 
 Bootstrap script lookup order:
 - `aws/<environment>/init/<script>`
