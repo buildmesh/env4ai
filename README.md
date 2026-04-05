@@ -18,11 +18,11 @@ This repository helps developers spin up reproducible EC2 workstations for AI to
 
 1. In **AWS Management Console**, create a customer-managed IAM policy using:
 
-   `aws/iam/gastown/deployer-policy.json`
+   `aws/iam/deployer-policy.json`
 
 2. For the very first env4ai run in an AWS account, also create a second customer-managed IAM policy using:
 
-   `aws/iam/gastown/first-run-bootstrap-policy.json`
+   `aws/iam/first-run-bootstrap-policy.json`
 
 3. Attach `deployer-policy.json` to the IAM user used by your local AWS `default` profile.
 
@@ -49,7 +49,7 @@ env4ai deploys Spot Fleet through CDK and the AWS API. In that path, you should 
 
 Before the first successful `make <environment>` run in a new AWS account:
 
-1. Temporarily attach `aws/iam/gastown/first-run-bootstrap-policy.json` to the IAM user that will run env4ai.
+1. Temporarily attach `aws/iam/first-run-bootstrap-policy.json` to the IAM user that will run env4ai.
 2. Create the Spot service-linked roles once:
 
    ```bash
@@ -81,7 +81,7 @@ Before the first successful `make <environment>` run in a new AWS account:
    ```
 
 4. Run your first deploy.
-5. After the first deploy succeeds, detach `aws/iam/gastown/first-run-bootstrap-policy.json` from the IAM user. Keep `aws/iam/gastown/deployer-policy.json` attached for normal env4ai use.
+5. After the first deploy succeeds, detach `aws/iam/first-run-bootstrap-policy.json` from the IAM user. Keep `aws/iam/deployer-policy.json` attached for normal env4ai use.
 
 ## Usage
 
