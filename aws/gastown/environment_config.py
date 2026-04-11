@@ -10,7 +10,9 @@ _ENVIRONMENT_SPEC = EnvironmentSpec(
         "python.sh",
         "docker.sh",
         "android.sh",
+        "nodejs.sh",
         "agents.sh",
+        "dev.sh",
         "gastown.sh",
     ),
     default_ami_selector=AmiSelectorConfig(

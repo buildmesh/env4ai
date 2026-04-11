@@ -5,7 +5,7 @@ export DEBIAN_FRONTEND=noninteractive
 export APT_LISTCHANGES_FRONTEND=none
 export NEEDRESTART_MODE=a
 
-log() { printf '[agents] %s\n' "$*"; }
+log() { printf '[gastown] %s\n' "$*"; }
 
 log "Installing Gas Town..."
 

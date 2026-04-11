@@ -5,19 +5,7 @@ export DEBIAN_FRONTEND=noninteractive
 export APT_LISTCHANGES_FRONTEND=none
 export NEEDRESTART_MODE=a
 
-log() { printf '[agents] %s\n' "$*"; }
-
-# Install Codex
-log "Installing Codex..."
-sudo -E npm i -g @openai/codex
-
-# Install Claude Code
-log "Installing Claude Code..."
-curl -fsSL https://claude.ai/install.sh | bash
-
-# Install OpenCode
-log "Installing OpenCode..."
-npm i -g opencode-ai
+log() { printf '[dev] %s\n' "$*"; }
 
 # Install Beads
 log "Installing Beads..."
@@ -26,17 +14,17 @@ sudo -u ubuntu -H bash -lc 'cd /home/ubuntu && /usr/local/go/bin/go install gith
 
 # Add Google's signing key + repo (modern keyring approach)
 log "Installing Google Chrome..."
-sudo install -d -m 0755 /etc/apt/keyrings
+install -d -m 0755 /etc/apt/keyrings
 curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
-  | sudo gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
-sudo chmod a+r /etc/apt/keyrings/google-chrome.gpg
+  | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
+chmod a+r /etc/apt/keyrings/google-chrome.gpg
 
 echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" \
-  | sudo tee /etc/apt/sources.list.d/google-chrome.list >/dev/null
+  | tee /etc/apt/sources.list.d/google-chrome.list >/dev/null
 
 # Install Chrome
-sudo -E apt-get update </dev/null
-sudo -E apt-get install -y google-chrome-stable </dev/null
+apt-get update </dev/null
+apt-get install -y google-chrome-stable </dev/null
 echo "export ROD_CHROME_BIN=/usr/bin/google-chrome" >> /home/ubuntu/.bashrc
 
 # Install Rodney
@@ -52,4 +40,4 @@ echo "export PATH=\"/home/ubuntu/.local/bin:/home/ubuntu/go/bin:$PATH\"" >> /hom
 export PATH="/home/ubuntu/.local/bin:/home/ubuntu/go/bin:$PATH"
 
 # Install OpenSpec
-npm install -g @fission-ai/openspec@latest
+runuser -l ubuntu -c '. "/home/ubuntu/.nvm/nvm.sh" && npm install -g @fission-ai/openspec@latest'
