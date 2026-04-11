@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 from typing import Callable, Mapping, Sequence, TextIO
 
 import boto3
@@ -459,6 +460,7 @@ def run_deploy_lifecycle(
         bootstrap_on_restored_ami=mode.ami_bootstrap,
         eip_allocation_id=eip_info["allocation_id"],
     )
+    time.sleep(5)
     run_post_deploy_check(
         stack_dir=inputs.stack_dir,
         stack_name=inputs.stack_name,
