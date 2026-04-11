@@ -15,4 +15,8 @@ runuser -l ubuntu -c '. "/home/ubuntu/.nvm/nvm.sh" && npm i -g @openai/codex'
 log "Installing Claude Code..."
 runuser -l ubuntu -c 'curl -fsSL https://claude.ai/install.sh | bash'
 
+# Install OpenCode
+log "Installing OpenCode..."
+runuser -l ubuntu -c '. "/home/ubuntu/.nvm/nvm.sh" && npm i -g opencode-ai'
+
 echo 'export PATH="/home/ubuntu/.local/bin:$PATH"' >> /home/ubuntu/.bashrc
