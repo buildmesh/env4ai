@@ -30,6 +30,7 @@ class Env4aiNetworkStackTests(unittest.TestCase):
         template.resource_count_is("AWS::EC2::VPC", 1)
         template.resource_count_is("AWS::EC2::InternetGateway", 1)
         template.resource_count_is("AWS::EC2::VPCGatewayAttachment", 1)
+        template.resource_count_is("AWS::EC2::Subnet", 1)
         template.has_resource_properties(
             "AWS::EC2::VPC",
             {
@@ -37,6 +38,69 @@ class Env4aiNetworkStackTests(unittest.TestCase):
                 "Tags": assertions.Match.array_with(
                     [{"Key": "Name", "Value": "env4ai"}]
                 ),
+            },
+        )
+
+    def test_network_stack_creates_shared_ssm_infrastructure(self) -> None:
+        """Expected: shared SSM subnet, endpoints, SGs, role, and profile exist."""
+        app = core.App()
+        stack = Env4aiNetworkStack(app, "Env4aiNetworkStack", env=self._test_env())
+        template = assertions.Template.from_stack(stack)
+
+        template.resource_count_is("AWS::EC2::VPCEndpoint", 3)
+        template.resource_count_is("AWS::EC2::SecurityGroup", 2)
+        template.resource_count_is("AWS::IAM::Role", 1)
+        template.resource_count_is("AWS::IAM::InstanceProfile", 1)
+        template.has_resource_properties(
+            "AWS::EC2::Subnet",
+            {
+                "CidrBlock": "10.0.250.0/24",
+            },
+        )
+        template.has_resource_properties(
+            "AWS::IAM::Role",
+            {
+                "AssumeRolePolicyDocument": {
+                    "Statement": assertions.Match.array_with(
+                        [
+                            assertions.Match.object_like(
+                                {
+                                    "Principal": {"Service": "ec2.amazonaws.com"},
+                                }
+                            )
+                        ]
+                    )
+                },
+                "ManagedPolicyArns": assertions.Match.array_with(
+                    [
+                        {
+                            "Fn::Join": assertions.Match.any_value(),
+                        }
+                    ]
+                ),
+            },
+        )
+
+    def test_network_stack_links_ssm_client_and_endpoint_security_groups(self) -> None:
+        """Edge: SSM client and endpoint SGs are restricted to HTTPS between them."""
+        app = core.App()
+        stack = Env4aiNetworkStack(app, "Env4aiNetworkStack", env=self._test_env())
+        template = assertions.Template.from_stack(stack)
+
+        template.has_resource_properties(
+            "AWS::EC2::SecurityGroupEgress",
+            {
+                "FromPort": 443,
+                "ToPort": 443,
+                "IpProtocol": "tcp",
+            },
+        )
+        template.has_resource_properties(
+            "AWS::EC2::SecurityGroupIngress",
+            {
+                "FromPort": 443,
+                "ToPort": 443,
+                "IpProtocol": "tcp",
             },
         )
 
@@ -50,6 +114,8 @@ class Env4aiNetworkStackTests(unittest.TestCase):
         self.assertIn("VpcId", outputs)
         self.assertIn("InternetGatewayId", outputs)
         self.assertIn("VpcCidr", outputs)
+        self.assertIn("SsmClientsSecurityGroupId", outputs)
+        self.assertIn("SsmInstanceProfileArn", outputs)
 
 
 if __name__ == "__main__":
