@@ -71,7 +71,15 @@ class AppResolverTests(unittest.TestCase):
             patch("app.cdk.Environment", return_value=environment_obj),
             patch("app.get_account", return_value="111111111111"),
             patch("app.get_region", return_value="us-west-2"),
-            patch("app.Env4aiNetworkStack", return_value=Mock(vpc="vpc", internet_gateway=Mock(ref="igw"))) as network_stack_mock,
+            patch(
+                "app.Env4aiNetworkStack",
+                return_value=Mock(
+                    vpc="vpc",
+                    internet_gateway=Mock(ref="igw"),
+                    ssm_clients_sg=Mock(security_group_id="sg-ssm"),
+                    ssm_instance_profile=Mock(attr_arn="arn:aws:iam::111111111111:instance-profile/ssm"),
+                ),
+            ) as network_stack_mock,
             patch("app.WorkstationStack") as stack_mock,
         ):
             base_app.main()
@@ -90,6 +98,9 @@ class AppResolverTests(unittest.TestCase):
             bootstrap_on_restored_ami=False,
             verbose_bootstrap_resolution=False,
             eip_allocation_id=None,
+            access_mode="ssh",
+            shared_ssm_clients_security_group_id="sg-ssm",
+            shared_ssm_instance_profile_arn="arn:aws:iam::111111111111:instance-profile/ssm",
             environment_spec=ENVIRONMENT_SPEC,
             env=environment_obj,
         )
@@ -108,7 +119,15 @@ class AppResolverTests(unittest.TestCase):
             patch("app.cdk.Environment", return_value=environment_obj),
             patch("app.get_account", return_value="111111111111"),
             patch("app.get_region", return_value="us-west-2"),
-            patch("app.Env4aiNetworkStack", return_value=Mock(vpc="vpc", internet_gateway=Mock(ref="igw"))),
+            patch(
+                "app.Env4aiNetworkStack",
+                return_value=Mock(
+                    vpc="vpc",
+                    internet_gateway=Mock(ref="igw"),
+                    ssm_clients_sg=Mock(security_group_id="sg-ssm"),
+                    ssm_instance_profile=Mock(attr_arn="arn:aws:iam::111111111111:instance-profile/ssm"),
+                ),
+            ),
             patch("app.WorkstationStack") as stack_mock,
         ):
             base_app.main()
@@ -122,6 +141,9 @@ class AppResolverTests(unittest.TestCase):
             bootstrap_on_restored_ami=False,
             verbose_bootstrap_resolution=False,
             eip_allocation_id=None,
+            access_mode="ssh",
+            shared_ssm_clients_security_group_id="sg-ssm",
+            shared_ssm_instance_profile_arn="arn:aws:iam::111111111111:instance-profile/ssm",
             environment_spec=ENVIRONMENT_SPEC,
             env=environment_obj,
         )
@@ -140,7 +162,15 @@ class AppResolverTests(unittest.TestCase):
             patch("app.cdk.Environment", return_value=environment_obj),
             patch("app.get_account", return_value="111111111111"),
             patch("app.get_region", return_value="us-west-2"),
-            patch("app.Env4aiNetworkStack", return_value=Mock(vpc="vpc", internet_gateway=Mock(ref="igw"))),
+            patch(
+                "app.Env4aiNetworkStack",
+                return_value=Mock(
+                    vpc="vpc",
+                    internet_gateway=Mock(ref="igw"),
+                    ssm_clients_sg=Mock(security_group_id="sg-ssm"),
+                    ssm_instance_profile=Mock(attr_arn="arn:aws:iam::111111111111:instance-profile/ssm"),
+                ),
+            ),
             patch("app.WorkstationStack") as stack_mock,
         ):
             base_app.main()
@@ -154,10 +184,41 @@ class AppResolverTests(unittest.TestCase):
             bootstrap_on_restored_ami=False,
             verbose_bootstrap_resolution=True,
             eip_allocation_id=None,
+            access_mode="ssh",
+            shared_ssm_clients_security_group_id="sg-ssm",
+            shared_ssm_instance_profile_arn="arn:aws:iam::111111111111:instance-profile/ssm",
             environment_spec=ENVIRONMENT_SPEC,
             env=environment_obj,
         )
         app_instance.synth.assert_called_once()
+
+    def test_main_passes_access_mode_from_context(self) -> None:
+        """Expected: explicit access-mode context is passed to the workstation stack."""
+        app_instance = Mock()
+        app_instance.node.try_get_context.side_effect = (
+            lambda key: "ssm" if key == "access_mode" else None
+        )
+        environment_obj = Mock()
+
+        with (
+            patch("app.cdk.App", return_value=app_instance),
+            patch("app.cdk.Environment", return_value=environment_obj),
+            patch("app.get_account", return_value="111111111111"),
+            patch("app.get_region", return_value="us-west-2"),
+            patch(
+                "app.Env4aiNetworkStack",
+                return_value=Mock(
+                    vpc="vpc",
+                    internet_gateway=Mock(ref="igw"),
+                    ssm_clients_sg=Mock(security_group_id="sg-ssm"),
+                    ssm_instance_profile=Mock(attr_arn="arn:aws:iam::111111111111:instance-profile/ssm"),
+                ),
+            ),
+            patch("app.WorkstationStack") as stack_mock,
+        ):
+            base_app.main()
+
+        self.assertEqual("ssm", stack_mock.call_args.kwargs["access_mode"])
 
     def test_main_propagates_account_resolution_failure(self) -> None:
         """Failure: account resolution error bubbles up and aborts synth."""

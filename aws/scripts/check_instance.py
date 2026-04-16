@@ -42,10 +42,12 @@ def parse_args() -> argparse.Namespace:
     default_stack_name = f"{name.capitalize()}WorkstationStack"
     default_spot_fleet_logical_id = f"{name.capitalize()}SpotFleet"
     default_ssh_alias = f"{name}-workstation"
+    default_access_mode = "ssh"
     if environment_spec is not None:
         default_stack_name = str(environment_spec.stack_name)
         default_spot_fleet_logical_id = str(environment_spec.spot_fleet_logical_id)
         default_ssh_alias = str(environment_spec.ssh_alias)
+        default_access_mode = str(getattr(environment_spec, "default_access_mode", "ssh"))
 
     """Parse command-line arguments for instance lookup."""
     parser = argparse.ArgumentParser(
@@ -85,6 +87,12 @@ def parse_args() -> argparse.Namespace:
         "--identity-file",
         default="~/.ssh/aws_key.pem",
         help="SSH identity file path to show in the SSH config snippet.",
+    )
+    parser.add_argument(
+        "--access-mode",
+        choices=("ssh", "ssm", "both"),
+        default=default_access_mode,
+        help="Connection mode used for the deployed workstation.",
     )
     parser.add_argument(
         "--eip-allocation-id",
@@ -245,6 +253,15 @@ def build_ssh_config_snippet(host_alias: str, ip_address: str, ssh_user: str, id
     )
 
 
+def build_ssm_start_session_command(region: str, instance_id: str, profile: str | None) -> str:
+    """Build the AWS CLI command used to start an SSM session."""
+    command = ["aws", "ssm", "start-session", "--region", region]
+    if profile:
+        command.extend(["--profile", profile])
+    command.extend(["--target", instance_id])
+    return " ".join(command)
+
+
 def main() -> int:
     """Run instance lookup and print user-facing connection instructions."""
     args = parse_args()
@@ -282,6 +299,7 @@ def main() -> int:
     if launch_time:
         print(f"Launch time: {launch_time}")
 
+    access_mode = normalize_optional(args.access_mode) or "ssh"
     eip_allocation_id = normalize_optional(args.eip_allocation_id)
     eip_public_ip = normalize_optional(args.eip_public_ip)
 
@@ -302,6 +320,19 @@ def main() -> int:
         display_ip = eip_public_ip or public_ip
     else:
         display_ip = public_ip
+
+    if access_mode in {"ssm", "both"}:
+        print("\nStart an SSM session:\n")
+        print(
+            build_ssm_start_session_command(
+                region=region,
+                instance_id=instance_id,
+                profile=normalize_optional(args.profile),
+            )
+        )
+
+    if access_mode == "ssm":
+        return 0
 
     if not display_ip:
         print("Public IP not assigned yet. Wait a moment, then run this script again.")

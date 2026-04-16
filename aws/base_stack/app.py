@@ -21,6 +21,8 @@ from workstation_core.runtime_resolution import (
     parse_optional_text_context,
 )
 
+_VALID_ACCESS_MODES = frozenset({"ssh", "ssm", "both"})
+
 
 def main() -> None:
     """Synthesize the CDK app for this environment."""
@@ -40,6 +42,12 @@ def main() -> None:
             value=verbose_bootstrap_context,
             context_key="verbose_bootstrap_resolution",
         )
+    access_mode = str(getattr(ENVIRONMENT_SPEC, "default_access_mode", "ssh")).strip() or "ssh"
+    access_mode_context = parse_optional_text_context(app.node.try_get_context("access_mode"))
+    if access_mode_context is not None:
+        if access_mode_context not in _VALID_ACCESS_MODES:
+            raise RuntimeError("access_mode context must be one of: ssh, ssm, both")
+        access_mode = access_mode_context
     eip_allocation_id = parse_optional_text_context(app.node.try_get_context("eip_allocation_id"))
     env = cdk.Environment(account=get_account(), region=get_region())
     network_stack = Env4aiNetworkStack(
@@ -57,6 +65,9 @@ def main() -> None:
         bootstrap_on_restored_ami=bootstrap_on_restored_ami,
         verbose_bootstrap_resolution=verbose_bootstrap_resolution,
         eip_allocation_id=eip_allocation_id,
+        access_mode=access_mode,
+        shared_ssm_clients_security_group_id=network_stack.ssm_clients_sg.security_group_id,
+        shared_ssm_instance_profile_arn=network_stack.ssm_instance_profile.attr_arn,
         environment_spec=ENVIRONMENT_SPEC,
         env=env,
     )

@@ -19,6 +19,7 @@ from botocore.exceptions import ClientError
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 
 from check_instance import (
+    build_ssm_start_session_command,
     build_ssh_config_snippet,
     get_region,
     get_newest_instance_for_spot_fleet,
@@ -176,6 +177,19 @@ class CheckScriptTests(unittest.TestCase):
         self.assertIn("User ubuntu", snippet)
         self.assertIn("IdentityFile ~/.ssh/aws_key.pem", snippet)
 
+    def test_build_ssm_start_session_command(self) -> None:
+        """Expected: SSM session command includes region, profile, and target."""
+        command = build_ssm_start_session_command(
+            region="us-west-2",
+            instance_id="i-1234567890abcdef0",
+            profile="sandbox",
+        )
+
+        self.assertEqual(
+            "aws ssm start-session --region us-west-2 --profile sandbox --target i-1234567890abcdef0",
+            command,
+        )
+
     def test_main_prints_region_on_success(self) -> None:
         """Expected: resolved region is included in successful output."""
         args = type(
@@ -189,6 +203,7 @@ class CheckScriptTests(unittest.TestCase):
                 "ssh_host_alias": "test-workstation",
                 "ssh_user": "ubuntu",
                 "identity_file": "~/.ssh/aws_key.pem",
+                "access_mode": "ssh",
                 "eip_allocation_id": None,
                 "eip_public_ip": None,
             },
@@ -229,6 +244,7 @@ class CheckScriptTests(unittest.TestCase):
                 "ssh_host_alias": "test-workstation",
                 "ssh_user": "ubuntu",
                 "identity_file": "~/.ssh/aws_key.pem",
+                "access_mode": "ssh",
                 "eip_allocation_id": None,
                 "eip_public_ip": None,
             },
@@ -256,6 +272,47 @@ class CheckScriptTests(unittest.TestCase):
         self.assertEqual(1, result)
         self.assertIn("Region: us-east-1", stdout.getvalue())
 
+    def test_main_prints_ssm_command_when_access_mode_is_ssm(self) -> None:
+        """Expected: SSM-only mode prints a start-session command and succeeds without public IP."""
+        args = type(
+            "Args",
+            (),
+            {
+                "region": "us-west-2",
+                "profile": "sandbox",
+                "stack_name": "TestWorkstationStack",
+                "spot_fleet_logical_id": "TestSpotFleet",
+                "ssh_host_alias": "test-workstation",
+                "ssh_user": "ubuntu",
+                "identity_file": "~/.ssh/aws_key.pem",
+                "access_mode": "ssm",
+                "eip_allocation_id": None,
+                "eip_public_ip": None,
+            },
+        )()
+        session = Mock()
+        session.client.side_effect = [Mock(), Mock()]
+
+        with (
+            patch("check_instance.parse_args", return_value=args),
+            patch("check_instance.get_region", return_value="us-west-2"),
+            patch("check_instance.boto3.Session", return_value=session),
+            patch("check_instance.get_spot_fleet_request_id", return_value="sfr-123"),
+            patch(
+                "check_instance.get_newest_instance_for_spot_fleet",
+                return_value={
+                    "InstanceId": "i-123",
+                    "State": {"Name": "running"},
+                    "PublicIpAddress": None,
+                },
+            ),
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            result = main()
+
+        self.assertEqual(0, result)
+        self.assertIn("aws ssm start-session --region us-west-2 --profile sandbox --target i-123", stdout.getvalue())
+
     def test_main_returns_failure_when_region_resolution_fails(self) -> None:
         """Failure: unresolved region returns non-zero and prints error."""
         args = type(
@@ -269,6 +326,7 @@ class CheckScriptTests(unittest.TestCase):
                 "ssh_host_alias": "test-workstation",
                 "ssh_user": "ubuntu",
                 "identity_file": "~/.ssh/aws_key.pem",
+                "access_mode": "ssh",
             },
         )()
 
