@@ -36,7 +36,7 @@ All workstation environments now deploy into one shared VPC and one shared Inter
 
 4. Attach `first-run-bootstrap-policy.json` to that same IAM user temporarily, only for the first-run Spot Fleet bootstrap described below.
 
-5. Create an EC2 key pair in **AWS Management Console > EC2 > Network & Security > Key Pairs**:
+5. If you will use `ACCESS_MODE=ssh` or `ACCESS_MODE=both`, create an EC2 key pair in **AWS Management Console > EC2 > Network & Security > Key Pairs**:
    - Name: `aws_key`
    - Download the private key and place it at:
 
@@ -112,6 +112,24 @@ AMI names use the format `<environment>_<tag>` (for example `gastown_20260301`).
 
 > **Note:** env4ai’s deploy path uses CDK/API-based Spot Fleet provisioning. Complete the one-time Spot Fleet bootstrap in [First-Run Spot Fleet Bootstrap](#first-run-spot-fleet-bootstrap) before the first deploy in a new AWS account.
 
+### Access Modes
+
+Use `ACCESS_MODE` to choose how a workstation is reached at deploy time:
+
+- `ACCESS_MODE=ssh` keeps the existing behavior: SSH ingress from the internet, the EC2 key pair requirement, and SSH config guidance after deploy.
+- `ACCESS_MODE=ssm` attaches the shared SSM instance profile and SSM client security group, does not open inbound SSH, does not require the EC2 key pair, and prints an `aws ssm start-session` command after deploy.
+- `ACCESS_MODE=both` keeps SSH enabled and also attaches the shared SSM resources so the workstation can be reached through either method.
+
+Examples:
+
+```bash
+make gastown ACCESS_MODE=ssh
+make gastown ACCESS_MODE=ssm
+make gastown ACCESS_MODE=both
+```
+
+If you use `ACCESS_MODE=ssm` or `ACCESS_MODE=both`, install the AWS Session Manager plugin on the machine where you will run `aws ssm start-session`.
+
 Bootstrap script lookup order:
 - `aws/<environment>/init/<script>`
 - `aws/common/init/<script>`
@@ -130,6 +148,8 @@ The `make` targets and environment variables below provide the same operations a
 # Deploy
 make gastown
 make builder
+make gastown ACCESS_MODE=ssm
+make gastown ACCESS_MODE=both
 
 # Destroy
 make gastown ACTION=STOP
@@ -157,6 +177,9 @@ AMI_LOAD=20260301 AMI_BOOTSTRAP=1 make gastown
 
 **Behavior notes:**
 - Every deploy ensures `Env4aiNetworkStack` exists before the environment stack is deployed.
+- `ACCESS_MODE` defaults to `ssh` unless an environment overrides `default_access_mode`.
+- `ACCESS_MODE=ssm` omits SSH ingress and the EC2 key pair from the workstation launch.
+- `ACCESS_MODE=both` keeps SSH enabled and also attaches the shared SSM role/profile and SSM client security group.
 - `AMI_LOAD` and `AMI_LIST` are mutually exclusive; invalid combinations fail fast.
 - `AMI_PICK=1` is only valid with `AMI_LIST=1`.
 - AMI list/load modes run an IAM preflight and fail early with remediation if `ec2:DescribeImages` is missing.
@@ -190,7 +213,8 @@ cdk deploy -c verbose_bootstrap_resolution=true
 - Region is read from `~/.aws/config` (active profile).
 - Region/account can be overridden with options/environment variables (for example `CDK_DEFAULT_REGION`, `CDK_DEFAULT_ACCOUNT`, and `--region` where supported by scripts/commands).
 - The shared `env4ai` VPC uses `10.0.0.0/16`; each environment must define a unique `subnet_cidr` inside that range.
-- SSH is currently open on port 22 to anywhere (`0.0.0.0/0`); restrict this before broader use.
+- `Env4aiNetworkStack` now also owns the shared Systems Manager interface endpoints, SSM security groups, and the EC2 instance role/profile used for Session Manager access.
+- `ACCESS_MODE=ssh` and `ACCESS_MODE=both` keep SSH open on port 22 to anywhere (`0.0.0.0/0`); `ACCESS_MODE=ssm` avoids public SSH ingress.
 - Costs apply while infrastructure is running.
 
 ## Project Layout

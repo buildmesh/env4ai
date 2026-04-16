@@ -21,6 +21,7 @@ _ENVIRONMENT_SPEC = EnvironmentSpec(
     instance_type="t3.large",
     volume_size=30,
     spot_price="0.1",
+    default_access_mode="ssh",
 )
 validate_environment_spec(_ENVIRONMENT_SPEC)
 
