@@ -16,7 +16,8 @@ apt-get update -y
 apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
-    make
+    make \
+    unzip
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 

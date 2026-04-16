@@ -8,6 +8,8 @@ _ENVIRONMENT_SPEC = EnvironmentSpec(
     bootstrap_files=(
         "deps.sh",
         "docker.sh",
+        "aws.sh",
+        "aws_ssm.sh"
     ),
     default_ami_selector=AmiSelectorConfig(
         owner="099720109477",
