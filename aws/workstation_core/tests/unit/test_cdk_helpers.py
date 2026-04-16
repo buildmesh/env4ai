@@ -148,7 +148,7 @@ class CdkHelpersTests(unittest.TestCase):
         launch_spec = build_spot_fleet_launch_specification(
             ami_id="ami-12345",
             instance_type="t3.large",
-            security_group_id="sg-12345",
+            security_group_ids=["sg-12345"],
             subnet_id="subnet-12345",
             volume_size=100,
             include_bootstrap_user_data=False,
@@ -156,7 +156,32 @@ class CdkHelpersTests(unittest.TestCase):
         )
 
         self.assertEqual("ami-12345", launch_spec["image_id"])
+        self.assertEqual([{"groupId": "sg-12345"}], launch_spec["security_groups"])
         self.assertNotIn("user_data", launch_spec)
+
+    def test_build_launch_spec_can_omit_key_name_and_include_instance_profile(self) -> None:
+        """Expected: access-mode helpers can disable key pairs and attach instance profiles."""
+        launch_spec = build_spot_fleet_launch_specification(
+            ami_id="ami-12345",
+            instance_type="t3.large",
+            security_group_ids=["sg-12345", "sg-67890"],
+            subnet_id="subnet-12345",
+            volume_size=100,
+            include_bootstrap_user_data=False,
+            bootstrap_files=("deps.sh",),
+            key_name=None,
+            iam_instance_profile_arn="arn:aws:iam::111111111111:instance-profile/test",
+        )
+
+        self.assertNotIn("key_name", launch_spec)
+        self.assertEqual(
+            {"arn": "arn:aws:iam::111111111111:instance-profile/test"},
+            launch_spec["iam_instance_profile"],
+        )
+        self.assertEqual(
+            [{"groupId": "sg-12345"}, {"groupId": "sg-67890"}],
+            launch_spec["security_groups"],
+        )
 
     def test_resolve_ami_id_rejects_invalid_source(self) -> None:
         """Failure: unsupported AMI source values are rejected immediately."""

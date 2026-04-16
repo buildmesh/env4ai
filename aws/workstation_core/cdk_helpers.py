@@ -190,11 +190,13 @@ def build_spot_fleet_launch_specification(
     *,
     ami_id: str,
     instance_type: str,
-    security_group_id: str,
+    security_group_ids: list[str],
     subnet_id: str,
     volume_size: int,
     include_bootstrap_user_data: bool,
     bootstrap_files: tuple[str, ...],
+    key_name: str | None = "aws_key",
+    iam_instance_profile_arn: str | None = None,
     verbose_bootstrap_resolution: bool = False,
 ) -> dict[str, object]:
     """Build a reusable Spot Fleet launch specification payload.
@@ -202,11 +204,13 @@ def build_spot_fleet_launch_specification(
     Args:
         ami_id: AMI ID for fleet launches.
         instance_type: EC2 instance type.
-        security_group_id: Security group ID to attach.
+        security_group_ids: Security group IDs to attach.
         subnet_id: Subnet ID for fleet launches.
         volume_size: Root volume size in GiB.
         include_bootstrap_user_data: Whether to include bootstrap scripts.
         bootstrap_files: Ordered init script filenames.
+        key_name: Optional EC2 key pair name.
+        iam_instance_profile_arn: Optional EC2 instance profile ARN.
         verbose_bootstrap_resolution: Whether to print resolved bootstrap paths.
 
     Returns:
@@ -215,8 +219,7 @@ def build_spot_fleet_launch_specification(
     launch_specification: dict[str, object] = {
         "image_id": ami_id,
         "instance_type": instance_type,
-        "key_name": "aws_key",
-        "security_groups": [{"groupId": security_group_id}],
+        "security_groups": [{"groupId": group_id} for group_id in security_group_ids],
         "subnet_id": subnet_id,
         "block_device_mappings": [
             {
@@ -230,6 +233,10 @@ def build_spot_fleet_launch_specification(
             }
         ],
     }
+    if key_name:
+        launch_specification["key_name"] = key_name
+    if iam_instance_profile_arn:
+        launch_specification["iam_instance_profile"] = {"arn": iam_instance_profile_arn}
     if include_bootstrap_user_data:
         launch_specification["user_data"] = build_bootstrap_user_data(
             bootstrap_files,

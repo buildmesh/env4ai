@@ -3,7 +3,6 @@ from aws_cdk import (
     CfnTag,
     Stack,
     aws_ec2 as ec2,
-    aws_iam as iam,
 )
 from constructs import Construct
 from typing import Literal
@@ -32,6 +31,9 @@ class WorkstationStack(Stack):
         bootstrap_on_restored_ami: bool = False,
         verbose_bootstrap_resolution: bool = False,
         eip_allocation_id: str | None = None,
+        access_mode: Literal["ssh", "ssm", "both"] = "ssh",
+        shared_ssm_clients_security_group_id: str | None = None,
+        shared_ssm_instance_profile_arn: str | None = None,
         environment_spec: EnvironmentSpec = ENVIRONMENT_SPEC,
         **kwargs,
     ) -> None:
@@ -48,12 +50,27 @@ class WorkstationStack(Stack):
             bootstrap_on_restored_ami: Opt-in to run full bootstrap for restored AMIs.
             verbose_bootstrap_resolution: Print resolved bootstrap script paths.
             eip_allocation_id: Optional Elastic IP allocation ID to track in stack outputs.
+            access_mode: Workstation access mode (`ssh`, `ssm`, or `both`).
+            shared_ssm_clients_security_group_id: Shared SSM client SG ID from network stack.
+            shared_ssm_instance_profile_arn: Shared SSM instance profile ARN from network stack.
             shared_vpc: Shared VPC imported from ``Env4aiNetworkStack``.
             shared_igw_id: Shared Internet Gateway id from ``Env4aiNetworkStack``.
             environment_spec: Canonical environment configuration and naming source.
             **kwargs: Additional ``Stack`` keyword args.
         """
         super().__init__(scope, construct_id, **kwargs)
+
+        if access_mode not in {"ssh", "ssm", "both"}:
+            raise ValueError("access_mode must be one of: ssh, ssm, both")
+        if access_mode in {"ssm", "both"}:
+            if not shared_ssm_clients_security_group_id:
+                raise ValueError(
+                    "shared_ssm_clients_security_group_id is required for access_mode 'ssm' or 'both'"
+                )
+            if not shared_ssm_instance_profile_arn:
+                raise ValueError(
+                    "shared_ssm_instance_profile_arn is required for access_mode 'ssm' or 'both'"
+                )
 
         if eip_allocation_id:
             CfnOutput(
@@ -89,9 +106,13 @@ class WorkstationStack(Stack):
             route_table_id=route_table.ref,
         )
 
-        # Security group for SSH (VNC tunneled over SSH)
-        sg = ec2.SecurityGroup(self, environment_spec.construct_id("SG"), vpc=shared_vpc)
-        sg.add_ingress_rule(ec2.Peer.any_ipv4(), ec2.Port.tcp(22), "Allow SSH")
+        ssh_sg = ec2.SecurityGroup(
+            self,
+            environment_spec.construct_id("SshSecurityGroup"),
+            vpc=shared_vpc,
+        )
+        if access_mode in {"ssh", "both"}:
+            ssh_sg.add_ingress_rule(ec2.Peer.any_ipv4(), ec2.Port.tcp(22), "Allow SSH")
 
         # Reason: preserve ``ami_id_override`` compatibility while supporting the
         # new ``ami_source``/``selected_ami_id`` API.
@@ -136,14 +157,24 @@ class WorkstationStack(Stack):
             )
         )
 
+        security_group_ids: list[str] = []
+        if access_mode in {"ssh", "both"}:
+            security_group_ids.append(ssh_sg.security_group_id)
+        if access_mode in {"ssm", "both"} and shared_ssm_clients_security_group_id:
+            security_group_ids.append(shared_ssm_clients_security_group_id)
+
         launch_specification = build_spot_fleet_launch_specification(
             ami_id=ami_id,
             instance_type=environment_spec.instance_type,
-            security_group_id=sg.security_group_id,
+            security_group_ids=security_group_ids,
             subnet_id=local_zone_subnet.ref,
             volume_size=environment_spec.volume_size,
             include_bootstrap_user_data=should_include_bootstrap,
             bootstrap_files=environment_spec.bootstrap_files,
+            key_name="aws_key" if access_mode in {"ssh", "both"} else None,
+            iam_instance_profile_arn=(
+                shared_ssm_instance_profile_arn if access_mode in {"ssm", "both"} else None
+            ),
             verbose_bootstrap_resolution=verbose_bootstrap_resolution,
         )
         launch_specification["tag_specifications"] = [

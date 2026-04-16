@@ -4,6 +4,7 @@ Previously duplicated across builder/ and gastown/; now consolidated here
 because the stack implementation is identical for all environments.
 """
 
+import os
 from pathlib import Path
 import sys
 import unittest
@@ -42,6 +43,15 @@ TEST_SPEC = EnvironmentSpec(
 
 
 class WorkstationStackTests(unittest.TestCase):
+    def setUp(self) -> None:
+        """Run stack synthesis from the fixture cwd so bootstrap lookup is deterministic."""
+        self._original_cwd = Path.cwd()
+        os.chdir(_FIXTURES)
+
+    def tearDown(self) -> None:
+        """Restore the original cwd after each test."""
+        os.chdir(self._original_cwd)
+
     @staticmethod
     def _test_env() -> core.Environment:
         """Return a deterministic CDK env for stack synthesis in tests."""
@@ -60,6 +70,8 @@ class WorkstationStackTests(unittest.TestCase):
             stack_id,
             shared_vpc=network_stack.vpc,
             shared_igw_id=network_stack.internet_gateway.ref,
+            shared_ssm_clients_security_group_id=network_stack.ssm_clients_sg.security_group_id,
+            shared_ssm_instance_profile_arn=network_stack.ssm_instance_profile.attr_arn,
             environment_spec=TEST_SPEC,
             env=self._test_env(),
             **kwargs,
@@ -133,6 +145,54 @@ class WorkstationStackTests(unittest.TestCase):
                 }
             },
         )
+
+    def test_ssm_mode_omits_ssh_ingress_and_key_name(self) -> None:
+        """Expected: SSM-only mode avoids SSH ingress and EC2 key requirements."""
+        app = core.App()
+        stack = self._make_stack(
+            app,
+            "aws-workstation-ssm-only",
+            access_mode="ssm",
+        )
+        template = assertions.Template.from_stack(stack)
+        template_json = template.to_json()
+        launch_spec = template_json["Resources"]["TestSpotFleet"]["Properties"][
+            "SpotFleetRequestConfigData"
+        ]["LaunchSpecifications"][0]
+
+        self.assertEqual({}, template.find_resources("AWS::EC2::SecurityGroupIngress"))
+        self.assertNotIn("KeyName", launch_spec)
+        self.assertIn("IamInstanceProfile", launch_spec)
+
+    def test_both_mode_keeps_ssh_and_attaches_instance_profile(self) -> None:
+        """Edge: dual access mode preserves SSH while attaching SSM profile."""
+        app = core.App()
+        stack = self._make_stack(
+            app,
+            "aws-workstation-both",
+            access_mode="both",
+        )
+        template = assertions.Template.from_stack(stack)
+        template_json = template.to_json()
+        launch_spec = template_json["Resources"]["TestSpotFleet"]["Properties"][
+            "SpotFleetRequestConfigData"
+        ]["LaunchSpecifications"][0]
+
+        template.has_resource_properties(
+            "AWS::EC2::SecurityGroup",
+            {
+                "SecurityGroupIngress": assertions.Match.array_with(
+                    [
+                        assertions.Match.object_like(
+                            {"FromPort": 22, "ToPort": 22, "IpProtocol": "tcp"}
+                        )
+                    ]
+                )
+            },
+        )
+        self.assertEqual(2, len(launch_spec["SecurityGroups"]))
+        self.assertIn("KeyName", launch_spec)
+        self.assertIn("IamInstanceProfile", launch_spec)
 
     def test_selected_ami_defaults_to_skipping_bootstrap_user_data(self) -> None:
         """Expected: selected AMI path omits user data unless explicitly enabled."""
