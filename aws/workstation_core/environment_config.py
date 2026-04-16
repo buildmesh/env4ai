@@ -47,6 +47,7 @@ class EnvironmentSpec:
     instance_type: str
     volume_size: int
     spot_price: str
+    default_access_mode: str = "ssh"
 
     @property
     def stack_name(self) -> str:
@@ -103,6 +104,10 @@ def validate_environment_spec(spec: EnvironmentSpec) -> None:
         raise ValueError("EnvironmentSpec.volume_size must be greater than 0.")
     if not spec.spot_price.strip():
         raise ValueError("EnvironmentSpec.spot_price must be non-empty.")
+    if spec.default_access_mode not in {"ssh", "ssm", "both"}:
+        raise ValueError(
+            "EnvironmentSpec.default_access_mode must be one of: ssh, ssm, both."
+        )
     if not spec.default_ami_selector.owner.strip():
         raise ValueError("AmiSelectorConfig.owner must be non-empty.")
     if not spec.default_ami_selector.name.strip():

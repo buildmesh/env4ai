@@ -57,6 +57,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Optional AWS region override.",
     )
+    parser.add_argument(
+        "--access-mode",
+        choices=("ssh", "ssm", "both"),
+        default=None,
+        help="Optional workstation access mode override.",
+    )
     return parser.parse_args(argv)
 
 
@@ -70,6 +76,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             stack_name=args.stack_name,
             profile=args.profile,
             region=args.region,
+            access_mode=args.access_mode,
         )
     )
 

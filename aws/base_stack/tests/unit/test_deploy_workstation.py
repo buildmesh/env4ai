@@ -42,6 +42,7 @@ class DeployWorkstationScriptTests(unittest.TestCase):
                 stack_name="TestWorkstationStack",
                 profile=None,
                 region=None,
+                access_mode=None,
             )
         )
 
@@ -64,6 +65,23 @@ class DeployWorkstationScriptTests(unittest.TestCase):
 
         self.assertEqual("dev", args.profile)
         self.assertEqual("us-west-2", args.region)
+
+    def test_parse_args_accepts_optional_access_mode(self) -> None:
+        """Edge: access mode override is accepted and returned."""
+        args = parse_args(
+            [
+                "--environment",
+                "test",
+                "--stack-dir",
+                "/tmp/test",
+                "--stack-name",
+                "TestWorkstationStack",
+                "--access-mode",
+                "ssm",
+            ]
+        )
+
+        self.assertEqual("ssm", args.access_mode)
 
     def test_main_propagates_orchestration_failures(self) -> None:
         """Failure: orchestration errors are not swallowed by the wrapper."""

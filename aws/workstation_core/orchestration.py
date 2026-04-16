@@ -57,6 +57,7 @@ class DeployWorkflowInputs:
     stack_name: str
     profile: str | None = None
     region: str | None = None
+    access_mode: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,6 +261,7 @@ def deploy_stack(
     ami_id: str | None,
     bootstrap_on_restored_ami: bool,
     eip_allocation_id: str | None = None,
+    access_mode: str | None = None,
 ) -> None:
     """Deploy CDK stack with optional AMI, bootstrap, and EIP context."""
     command: list[str] = ["uv", "run", "cdk", "deploy", "--require-approval", "never", stack_name]
@@ -269,6 +271,8 @@ def deploy_stack(
             command.extend(["-c", "bootstrap_on_restored_ami=true"])
     if eip_allocation_id:
         command.extend(["-c", f"eip_allocation_id={eip_allocation_id}"])
+    if access_mode:
+        command.extend(["-c", f"access_mode={access_mode}"])
     run_command(
         command,
         cwd=stack_dir,
@@ -298,6 +302,7 @@ def run_post_deploy_check(
     stack_name: str,
     eip_allocation_id: str | None = None,
     eip_public_ip: str | None = None,
+    access_mode: str | None = None,
 ) -> None:
     """Run instance helper after a successful deploy.
 
@@ -312,6 +317,8 @@ def run_post_deploy_check(
         command.extend(["--eip-allocation-id", eip_allocation_id])
     if eip_public_ip:
         command.extend(["--eip-public-ip", eip_public_ip])
+    if access_mode:
+        command.extend(["--access-mode", access_mode])
     run_command(
         command,
         cwd=stack_dir,
@@ -334,6 +341,25 @@ def _resolve_profile(profile_override: str | None, env: Mapping[str, str]) -> st
     if profile_override is not None:
         return profile_override
     return env.get("AWS_PROFILE")
+
+
+def resolve_access_mode(
+    *,
+    cli_access_mode: str | None,
+    env: Mapping[str, str],
+    environment_spec: object | None,
+) -> str:
+    """Resolve workstation access mode from CLI, env, then spec defaults."""
+    if cli_access_mode and cli_access_mode.strip():
+        resolved = cli_access_mode.strip()
+    elif env.get("ACCESS_MODE", "").strip():
+        resolved = env["ACCESS_MODE"].strip()
+    else:
+        resolved = str(getattr(environment_spec, "default_access_mode", "ssh")).strip() or "ssh"
+
+    if resolved not in {"ssh", "ssm", "both"}:
+        raise RuntimeError("ACCESS_MODE must be one of: ssh, ssm, both.")
+    return resolved
 
 
 def _list_stack_names(cloudformation_client: BaseClient) -> set[str]:
@@ -439,6 +465,11 @@ def run_deploy_lifecycle(
     if environment_spec is not None:
         # Reason: use canonical naming from environment spec when available.
         environment_key = str(environment_spec.environment_key)
+    access_mode = resolve_access_mode(
+        cli_access_mode=inputs.access_mode,
+        env=environment,
+        environment_spec=environment_spec,
+    )
 
     ec2_client = make_ec2_client(profile=profile, region=region)
     selection = resolve_ami_selection(
@@ -459,6 +490,7 @@ def run_deploy_lifecycle(
         ami_id=selection.selected_ami_id,
         bootstrap_on_restored_ami=mode.ami_bootstrap,
         eip_allocation_id=eip_info["allocation_id"],
+        access_mode=access_mode,
     )
     time.sleep(5)
     run_post_deploy_check(
@@ -466,5 +498,6 @@ def run_deploy_lifecycle(
         stack_name=inputs.stack_name,
         eip_allocation_id=eip_info["allocation_id"],
         eip_public_ip=eip_info["public_ip"],
+        access_mode=access_mode,
     )
     return 0

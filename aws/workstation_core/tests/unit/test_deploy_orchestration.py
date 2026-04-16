@@ -21,6 +21,7 @@ class DeployOrchestrationTests(unittest.TestCase):
             stack_name="GastownWorkstationStack",
             profile=None,
             region=None,
+            access_mode=None,
         )
 
     def test_run_deploy_lifecycle_runs_default_deploy_path_without_ami_flags(self) -> None:
@@ -47,13 +48,45 @@ class DeployOrchestrationTests(unittest.TestCase):
             ami_id=None,
             bootstrap_on_restored_ami=False,
             eip_allocation_id="eipalloc-abc123",
+            access_mode="ssh",
         )
         post_check.assert_called_once_with(
             stack_dir="/tmp/gastown",
             stack_name="GastownWorkstationStack",
             eip_allocation_id="eipalloc-abc123",
             eip_public_ip="1.2.3.4",
+            access_mode="ssh",
         )
+
+    def test_run_deploy_lifecycle_prefers_cli_access_mode(self) -> None:
+        """Expected: CLI access mode override wins over env and environment defaults."""
+        env = {"AWS_REGION": "us-west-2", "ACCESS_MODE": "ssh"}
+        selection = Mock(should_deploy=True, selected_ami_id=None)
+        eip_info = {"allocation_id": "eipalloc-abc123", "public_ip": "1.2.3.4"}
+        environment_spec = Mock(environment_key="gastown", default_access_mode="both")
+
+        with (
+            patch("workstation_core.orchestration.load_environment_spec", return_value=environment_spec),
+            patch("workstation_core.orchestration.make_ec2_client", return_value=Mock()),
+            patch("workstation_core.orchestration.resolve_ami_selection", return_value=selection),
+            patch("workstation_core.orchestration.find_or_create_eip", return_value=eip_info),
+            patch("workstation_core.orchestration.deploy_shared_network_stack"),
+            patch("workstation_core.orchestration.deploy_stack") as deploy_stack,
+            patch("workstation_core.orchestration.run_post_deploy_check"),
+        ):
+            result = run_deploy_lifecycle(
+                inputs=DeployWorkflowInputs(
+                    environment="gastown",
+                    stack_dir="/tmp/gastown",
+                    stack_name="GastownWorkstationStack",
+                    access_mode="ssm",
+                ),
+                env=env,
+                out=io.StringIO(),
+            )
+
+        self.assertEqual(0, result)
+        self.assertEqual("ssm", deploy_stack.call_args.kwargs["access_mode"])
 
     def test_run_deploy_lifecycle_exits_early_for_list_only_mode(self) -> None:
         """Edge: AMI list-only mode does not invoke deploy or post-check commands."""

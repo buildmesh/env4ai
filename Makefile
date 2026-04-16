@@ -6,6 +6,7 @@ DOCKER_COMPOSE_RUN := docker compose run --rm \
 	-e AWS_DEFAULT_REGION \
 	-e CDK_DEFAULT_REGION \
 	-e CDK_DEFAULT_ACCOUNT \
+	-e ACCESS_MODE \
 	-e AMI_LOAD \
 	-e AMI_LIST \
 	-e AMI_PICK \
