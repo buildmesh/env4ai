@@ -22,6 +22,17 @@ def _load_policy() -> dict[str, object]:
 class DeployerPolicyTests(unittest.TestCase):
     """Validate least-privilege scoping for deployer-policy.json."""
 
+    def test_cloudformation_statement_includes_stack_listing_for_shared_network_checks(self) -> None:
+        """Expected: deploy orchestration can list stacks to detect shared network existence."""
+        policy = _load_policy()
+        statement = next(
+            item
+            for item in policy["Statement"]
+            if item["Sid"] == "CloudFormationStackLifecycle"
+        )
+
+        self.assertIn("cloudformation:ListStacks", statement["Action"])
+
     def test_ssm_iam_statement_is_scoped_to_shared_role_and_profile(self) -> None:
         """Expected: shared SSM IAM lifecycle actions avoid wildcard resources."""
         policy = _load_policy()
