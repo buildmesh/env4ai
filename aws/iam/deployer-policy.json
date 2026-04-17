@@ -138,24 +138,39 @@
       "Effect": "Allow",
       "Action": [
         "iam:CreateRole",
+        "iam:GetRole",
         "iam:DeleteRole",
+        "iam:ListInstanceProfilesForRole",
         "iam:CreateInstanceProfile",
+        "iam:GetInstanceProfile",
         "iam:DeleteInstanceProfile",
         "iam:AddRoleToInstanceProfile",
-        "iam:RemoveRoleFromInstanceProfile",
-        "iam:AttachRolePolicy",
-        "iam:DetachRolePolicy",
-        "iam:GetRole",
-        "iam:GetInstanceProfile",
-        "iam:ListInstanceProfilesForRole"
+        "iam:RemoveRoleFromInstanceProfile"
       ],
-      "Resource": "*"
+      "Resource": [
+        "arn:aws:iam::*:role/Env4aiNetworkStack-SsmEc2InstanceRole*",
+        "arn:aws:iam::*:instance-profile/Env4aiNetworkStack-SsmEc2InstanceProfile*"
+      ]
+    },
+    {
+      "Sid": "SsmRoleManagedPolicyAttachment",
+      "Effect": "Allow",
+      "Action": [
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy"
+      ],
+      "Resource": "arn:aws:iam::*:role/Env4aiNetworkStack-SsmEc2InstanceRole*",
+      "Condition": {
+        "ArnEquals": {
+          "iam:PolicyARN": "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+        }
+      }
     },
     {
       "Sid": "PassSsmEc2RoleToEc2",
       "Effect": "Allow",
       "Action": "iam:PassRole",
-      "Resource": "*",
+      "Resource": "arn:aws:iam::*:role/Env4aiNetworkStack-SsmEc2InstanceRole*",
       "Condition": {
         "StringEquals": {
           "iam:PassedToService": "ec2.amazonaws.com"
