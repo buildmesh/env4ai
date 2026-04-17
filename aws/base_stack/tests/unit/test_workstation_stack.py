@@ -163,6 +163,10 @@ class WorkstationStackTests(unittest.TestCase):
         self.assertEqual({}, template.find_resources("AWS::EC2::SecurityGroupIngress"))
         self.assertNotIn("KeyName", launch_spec)
         self.assertIn("IamInstanceProfile", launch_spec)
+        template.has_resource_properties(
+            "AWS::EC2::Subnet",
+            {"MapPublicIpOnLaunch": False},
+        )
 
     def test_both_mode_keeps_ssh_and_attaches_instance_profile(self) -> None:
         """Edge: dual access mode preserves SSH while attaching SSM profile."""
@@ -193,6 +197,25 @@ class WorkstationStackTests(unittest.TestCase):
         self.assertEqual(2, len(launch_spec["SecurityGroups"]))
         self.assertIn("KeyName", launch_spec)
         self.assertIn("IamInstanceProfile", launch_spec)
+        template.has_resource_properties(
+            "AWS::EC2::Subnet",
+            {"MapPublicIpOnLaunch": True},
+        )
+
+    def test_ssh_mode_keeps_public_ip_mapping(self) -> None:
+        """Expected: SSH-capable mode preserves public subnet behavior."""
+        app = core.App()
+        stack = self._make_stack(
+            app,
+            "aws-workstation-ssh-only",
+            access_mode="ssh",
+        )
+        template = assertions.Template.from_stack(stack)
+
+        template.has_resource_properties(
+            "AWS::EC2::Subnet",
+            {"MapPublicIpOnLaunch": True},
+        )
 
     def test_selected_ami_defaults_to_skipping_bootstrap_user_data(self) -> None:
         """Expected: selected AMI path omits user data unless explicitly enabled."""

@@ -16,6 +16,11 @@ from workstation_core.cdk_helpers import (
 )
 
 
+def _requires_public_connectivity(access_mode: Literal["ssh", "ssm", "both"]) -> bool:
+    """Return whether the access mode needs public IP-based connectivity."""
+    return access_mode in {"ssh", "both"}
+
+
 class WorkstationStack(Stack):
 
     def __init__(
@@ -72,6 +77,8 @@ class WorkstationStack(Stack):
                     "shared_ssm_instance_profile_arn is required for access_mode 'ssm' or 'both'"
                 )
 
+        requires_public_connectivity = _requires_public_connectivity(access_mode)
+
         if eip_allocation_id:
             CfnOutput(
                 self,
@@ -84,7 +91,7 @@ class WorkstationStack(Stack):
             availability_zone=resolve_subnet_availability_zone(availability_zone_index),
             cidr_block=environment_spec.subnet_cidr,
             vpc_id=shared_vpc.vpc_id,
-            map_public_ip_on_launch=True
+            map_public_ip_on_launch=requires_public_connectivity
         )
 
         route_table = ec2.CfnRouteTable(
@@ -111,7 +118,7 @@ class WorkstationStack(Stack):
             environment_spec.construct_id("SshSecurityGroup"),
             vpc=shared_vpc,
         )
-        if access_mode in {"ssh", "both"}:
+        if requires_public_connectivity:
             ssh_sg.add_ingress_rule(ec2.Peer.any_ipv4(), ec2.Port.tcp(22), "Allow SSH")
 
         # Reason: preserve ``ami_id_override`` compatibility while supporting the
@@ -158,7 +165,7 @@ class WorkstationStack(Stack):
         )
 
         security_group_ids: list[str] = []
-        if access_mode in {"ssh", "both"}:
+        if requires_public_connectivity:
             security_group_ids.append(ssh_sg.security_group_id)
         if access_mode in {"ssm", "both"} and shared_ssm_clients_security_group_id:
             security_group_ids.append(shared_ssm_clients_security_group_id)
@@ -171,7 +178,7 @@ class WorkstationStack(Stack):
             volume_size=environment_spec.volume_size,
             include_bootstrap_user_data=should_include_bootstrap,
             bootstrap_files=environment_spec.bootstrap_files,
-            key_name="aws_key" if access_mode in {"ssh", "both"} else None,
+            key_name="aws_key" if requires_public_connectivity else None,
             iam_instance_profile_arn=(
                 shared_ssm_instance_profile_arn if access_mode in {"ssm", "both"} else None
             ),

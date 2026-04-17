@@ -374,6 +374,13 @@ def resolve_access_mode(
     return resolved
 
 
+def requires_public_connectivity(access_mode: str) -> bool:
+    """Return whether the access mode requires public IP and Elastic IP behavior."""
+    if access_mode not in {"ssh", "ssm", "both"}:
+        raise RuntimeError("ACCESS_MODE must be one of: ssh, ssm, both.")
+    return access_mode in {"ssh", "both"}
+
+
 def _list_stack_names(cloudformation_client: BaseClient) -> set[str]:
     """Return non-deleted CloudFormation stack names in the current account/region."""
     paginator = cloudformation_client.get_paginator("list_stacks")
@@ -489,6 +496,7 @@ def run_deploy_lifecycle(
         env=environment,
         environment_spec=environment_spec,
     )
+    needs_public_connectivity = requires_public_connectivity(access_mode)
 
     ec2_client = make_ec2_client(profile=profile, region=region)
     selection = resolve_ami_selection(
@@ -503,21 +511,23 @@ def run_deploy_lifecycle(
 
     if not shared_network_stack_exists(profile=profile, region=region):
         deploy_shared_network_stack(stack_dir=inputs.stack_dir)
-    eip_info = find_or_create_eip(ec2_client=ec2_client, name=environment_key)
+    eip_info: Mapping[str, str] | None = None
+    if needs_public_connectivity:
+        eip_info = find_or_create_eip(ec2_client=ec2_client, name=environment_key)
     deploy_stack(
         stack_dir=inputs.stack_dir,
         stack_name=inputs.stack_name,
         ami_id=selection.selected_ami_id,
         bootstrap_on_restored_ami=mode.ami_bootstrap,
-        eip_allocation_id=eip_info["allocation_id"],
+        eip_allocation_id=eip_info["allocation_id"] if eip_info is not None else None,
         access_mode=access_mode,
     )
     time.sleep(5)
     run_post_deploy_check(
         stack_dir=inputs.stack_dir,
         stack_name=inputs.stack_name,
-        eip_allocation_id=eip_info["allocation_id"],
-        eip_public_ip=eip_info["public_ip"],
+        eip_allocation_id=eip_info["allocation_id"] if eip_info is not None else None,
+        eip_public_ip=eip_info["public_ip"] if eip_info is not None else None,
         access_mode=access_mode,
     )
     return 0
