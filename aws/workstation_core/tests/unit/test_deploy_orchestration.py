@@ -33,6 +33,7 @@ class DeployOrchestrationTests(unittest.TestCase):
         with (
             patch("workstation_core.orchestration.make_ec2_client", return_value=Mock()),
             patch("workstation_core.orchestration.resolve_ami_selection", return_value=selection),
+            patch("workstation_core.orchestration.shared_network_stack_exists", return_value=False),
             patch("workstation_core.orchestration.find_or_create_eip", return_value=eip_info),
             patch("workstation_core.orchestration.deploy_shared_network_stack") as deploy_shared_network_stack,
             patch("workstation_core.orchestration.deploy_stack") as deploy_stack,
@@ -58,6 +59,48 @@ class DeployOrchestrationTests(unittest.TestCase):
             access_mode="ssh",
         )
 
+    def test_run_deploy_lifecycle_deploys_shared_network_when_missing(self) -> None:
+        """Expected: first-use deploy creates the shared network before the workstation."""
+        env = {"AWS_REGION": "us-west-2"}
+        selection = Mock(should_deploy=True, selected_ami_id=None)
+        eip_info = {"allocation_id": "eipalloc-abc123", "public_ip": "1.2.3.4"}
+
+        with (
+            patch("workstation_core.orchestration.make_ec2_client", return_value=Mock()),
+            patch("workstation_core.orchestration.resolve_ami_selection", return_value=selection),
+            patch("workstation_core.orchestration.shared_network_stack_exists", return_value=False),
+            patch("workstation_core.orchestration.find_or_create_eip", return_value=eip_info),
+            patch("workstation_core.orchestration.deploy_shared_network_stack") as deploy_shared_network_stack,
+            patch("workstation_core.orchestration.deploy_stack") as deploy_stack,
+            patch("workstation_core.orchestration.run_post_deploy_check"),
+        ):
+            result = run_deploy_lifecycle(inputs=self._inputs(), env=env, out=io.StringIO())
+
+        self.assertEqual(0, result)
+        deploy_shared_network_stack.assert_called_once_with(stack_dir="/tmp/gastown")
+        deploy_stack.assert_called_once()
+
+    def test_run_deploy_lifecycle_skips_shared_network_deploy_when_stack_exists(self) -> None:
+        """Expected: routine deploys leave the shared network stack untouched."""
+        env = {"AWS_REGION": "us-west-2"}
+        selection = Mock(should_deploy=True, selected_ami_id=None)
+        eip_info = {"allocation_id": "eipalloc-abc123", "public_ip": "1.2.3.4"}
+
+        with (
+            patch("workstation_core.orchestration.make_ec2_client", return_value=Mock()),
+            patch("workstation_core.orchestration.resolve_ami_selection", return_value=selection),
+            patch("workstation_core.orchestration.shared_network_stack_exists", return_value=True),
+            patch("workstation_core.orchestration.find_or_create_eip", return_value=eip_info),
+            patch("workstation_core.orchestration.deploy_shared_network_stack") as deploy_shared_network_stack,
+            patch("workstation_core.orchestration.deploy_stack") as deploy_stack,
+            patch("workstation_core.orchestration.run_post_deploy_check"),
+        ):
+            result = run_deploy_lifecycle(inputs=self._inputs(), env=env, out=io.StringIO())
+
+        self.assertEqual(0, result)
+        deploy_shared_network_stack.assert_not_called()
+        deploy_stack.assert_called_once()
+
     def test_run_deploy_lifecycle_prefers_cli_access_mode(self) -> None:
         """Expected: CLI access mode override wins over env and environment defaults."""
         env = {"AWS_REGION": "us-west-2", "ACCESS_MODE": "ssh"}
@@ -69,6 +112,7 @@ class DeployOrchestrationTests(unittest.TestCase):
             patch("workstation_core.orchestration.load_environment_spec", return_value=environment_spec),
             patch("workstation_core.orchestration.make_ec2_client", return_value=Mock()),
             patch("workstation_core.orchestration.resolve_ami_selection", return_value=selection),
+            patch("workstation_core.orchestration.shared_network_stack_exists", return_value=False),
             patch("workstation_core.orchestration.find_or_create_eip", return_value=eip_info),
             patch("workstation_core.orchestration.deploy_shared_network_stack"),
             patch("workstation_core.orchestration.deploy_stack") as deploy_stack,
@@ -137,6 +181,7 @@ class DeployOrchestrationTests(unittest.TestCase):
             patch("workstation_core.orchestration.make_ec2_client", return_value=Mock()),
             patch("workstation_core.orchestration.resolve_ami_selection", return_value=selection),
             patch("workstation_core.orchestration.find_or_create_eip") as find_or_create_eip,
+            patch("workstation_core.orchestration.shared_network_stack_exists", return_value=False),
             patch(
                 "workstation_core.orchestration.deploy_shared_network_stack",
                 side_effect=RuntimeError("network deploy failed"),

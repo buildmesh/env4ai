@@ -218,6 +218,12 @@ def load_environment_spec(stack_dir: str) -> object | None:
 
 def make_ec2_client(profile: str | None, region: str | None) -> BaseClient:
     """Create an EC2 client with optional profile and region overrides."""
+    session = _make_boto3_session(profile=profile, region=region)
+    return session.client("ec2")
+
+
+def _make_boto3_session(profile: str | None, region: str | None) -> boto3.Session:
+    """Create a boto3 session with validated profile and region resolution."""
     profile_name = profile.strip() if profile and profile.strip() else None
     region_name = region.strip() if region and region.strip() else None
     session = boto3.Session(profile_name=profile_name, region_name=region_name)
@@ -225,7 +231,13 @@ def make_ec2_client(profile: str | None, region: str | None) -> BaseClient:
         raise RuntimeError(
             "Unable to resolve AWS region. Set --region, AWS_REGION, AWS_DEFAULT_REGION, or configure profile region."
         )
-    return session.client("ec2")
+    return session
+
+
+def make_cloudformation_client(profile: str | None, region: str | None) -> BaseClient:
+    """Create a CloudFormation client with optional profile and region overrides."""
+    session = _make_boto3_session(profile=profile, region=region)
+    return session.client("cloudformation")
 
 
 def run_command(command: Sequence[str], cwd: str, timeout_seconds: int | None = None) -> None:
@@ -375,6 +387,13 @@ def _list_stack_names(cloudformation_client: BaseClient) -> set[str]:
     return stack_names
 
 
+def shared_network_stack_exists(profile: str | None, region: str | None) -> bool:
+    """Return whether the shared network CloudFormation stack already exists."""
+    shared_network = get_shared_network_config()
+    cloudformation_client = make_cloudformation_client(profile=profile, region=region)
+    return shared_network.stack_name in _list_stack_names(cloudformation_client)
+
+
 def _resolve_stack_dir(aws_root: Path) -> str:
     """Select a deterministic environment CDK directory for shared stack commands."""
     candidates = sorted(
@@ -482,7 +501,8 @@ def run_deploy_lifecycle(
     if not selection.should_deploy:
         return 0
 
-    deploy_shared_network_stack(stack_dir=inputs.stack_dir)
+    if not shared_network_stack_exists(profile=profile, region=region):
+        deploy_shared_network_stack(stack_dir=inputs.stack_dir)
     eip_info = find_or_create_eip(ec2_client=ec2_client, name=environment_key)
     deploy_stack(
         stack_dir=inputs.stack_dir,
