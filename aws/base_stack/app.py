@@ -13,8 +13,9 @@ sys.path.insert(0, _APP_DIR)  # finds workstation/ in base_stack/
 sys.path.insert(0, os.getcwd())  # finds environment_config.py in the env dir (higher priority)
 
 from environment_config import ENVIRONMENT_SPEC
+from workstation.env4ai_network_stack import Env4aiNetworkStack
 from workstation.workstation_stack import WorkstationStack
-from workstation_core.config import get_shared_network_export_name
+from workstation_core.config import get_shared_network_config, get_shared_network_export_name
 from workstation_core.runtime_resolution import (
     get_account,
     get_region,
@@ -79,6 +80,8 @@ def main() -> None:
         access_mode = access_mode_context
     eip_allocation_id = parse_optional_text_context(app.node.try_get_context("eip_allocation_id"))
     env = cdk.Environment(account=get_account(), region=get_region())
+    shared_network_config = get_shared_network_config()
+    Env4aiNetworkStack(app, shared_network_config.stack_name, env=env)
     shared_network = load_shared_network_imports()
 
     workstation_stack = WorkstationStack(

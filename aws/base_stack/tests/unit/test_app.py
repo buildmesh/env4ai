@@ -82,6 +82,8 @@ class AppResolverTests(unittest.TestCase):
             patch("app.cdk.Environment", return_value=environment_obj),
             patch("app.get_account", return_value="111111111111"),
             patch("app.get_region", return_value="us-west-2"),
+            patch("app.get_shared_network_config", return_value=Mock(stack_name="Env4aiNetworkStack")),
+            patch("app.Env4aiNetworkStack") as network_stack_mock,
             patch(
                 "app.load_shared_network_imports",
                 return_value=self._shared_network_imports(),
@@ -90,6 +92,11 @@ class AppResolverTests(unittest.TestCase):
         ):
             base_app.main()
 
+        network_stack_mock.assert_called_once_with(
+            app_instance,
+            "Env4aiNetworkStack",
+            env=environment_obj,
+        )
         load_shared_network_imports.assert_called_once_with()
         stack_mock.assert_called_once_with(
             app_instance,
@@ -122,6 +129,8 @@ class AppResolverTests(unittest.TestCase):
             patch("app.cdk.Environment", return_value=environment_obj),
             patch("app.get_account", return_value="111111111111"),
             patch("app.get_region", return_value="us-west-2"),
+            patch("app.get_shared_network_config", return_value=Mock(stack_name="Env4aiNetworkStack")),
+            patch("app.Env4aiNetworkStack") as network_stack_mock,
             patch(
                 "app.load_shared_network_imports",
                 return_value=self._shared_network_imports(),
@@ -130,6 +139,11 @@ class AppResolverTests(unittest.TestCase):
         ):
             base_app.main()
 
+        network_stack_mock.assert_called_once_with(
+            app_instance,
+            "Env4aiNetworkStack",
+            env=environment_obj,
+        )
         stack_mock.assert_called_once_with(
             app_instance,
             ENVIRONMENT_SPEC.stack_name,
@@ -161,6 +175,8 @@ class AppResolverTests(unittest.TestCase):
             patch("app.cdk.Environment", return_value=environment_obj),
             patch("app.get_account", return_value="111111111111"),
             patch("app.get_region", return_value="us-west-2"),
+            patch("app.get_shared_network_config", return_value=Mock(stack_name="Env4aiNetworkStack")),
+            patch("app.Env4aiNetworkStack") as network_stack_mock,
             patch(
                 "app.load_shared_network_imports",
                 return_value=self._shared_network_imports(),
@@ -169,6 +185,11 @@ class AppResolverTests(unittest.TestCase):
         ):
             base_app.main()
 
+        network_stack_mock.assert_called_once_with(
+            app_instance,
+            "Env4aiNetworkStack",
+            env=environment_obj,
+        )
         stack_mock.assert_called_once_with(
             app_instance,
             ENVIRONMENT_SPEC.stack_name,
@@ -200,6 +221,8 @@ class AppResolverTests(unittest.TestCase):
             patch("app.cdk.Environment", return_value=environment_obj),
             patch("app.get_account", return_value="111111111111"),
             patch("app.get_region", return_value="us-west-2"),
+            patch("app.get_shared_network_config", return_value=Mock(stack_name="Env4aiNetworkStack")),
+            patch("app.Env4aiNetworkStack") as network_stack_mock,
             patch(
                 "app.load_shared_network_imports",
                 return_value=self._shared_network_imports(),
@@ -208,6 +231,11 @@ class AppResolverTests(unittest.TestCase):
         ):
             base_app.main()
 
+        network_stack_mock.assert_called_once_with(
+            app_instance,
+            "Env4aiNetworkStack",
+            env=environment_obj,
+        )
         self.assertEqual("ssm", stack_mock.call_args.kwargs["access_mode"])
 
     def test_main_propagates_account_resolution_failure(self) -> None:
@@ -218,11 +246,13 @@ class AppResolverTests(unittest.TestCase):
         with (
             patch("app.cdk.App", return_value=app_instance),
             patch("app.get_account", side_effect=RuntimeError("missing account")),
+            patch("app.Env4aiNetworkStack") as network_stack_mock,
             patch("app.WorkstationStack") as stack_mock,
         ):
             with self.assertRaisesRegex(RuntimeError, "missing account"):
                 base_app.main()
 
+        network_stack_mock.assert_not_called()
         stack_mock.assert_not_called()
         app_instance.synth.assert_not_called()
 
