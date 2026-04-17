@@ -194,6 +194,12 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
         self.assertFalse(availability["save_ami_only"].enabled)
         self.assertFalse(availability["destroy"].enabled)
         self.assertFalse(availability["destroy_and_save"].enabled)
+        self.assertTrue(availability["destroy_shared_network"].enabled)
+
+    def test_parse_action_choice_accepts_shared_network_destroy_aliases(self) -> None:
+        """Expected: the new shared-network action is reachable by menu number and alias."""
+        self.assertEqual("destroy_shared_network", parse_action_choice("8"))
+        self.assertEqual("destroy_shared_network", parse_action_choice("n"))
 
     def test_derive_is_deployed_false_for_not_found_stack_state(self) -> None:
         """Edge: stack-not-found always reports not deployed."""
@@ -220,6 +226,25 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
         self.assertFalse(result.should_quit)
         self.assertEqual([], calls)
         self.assertIn("Destroy canceled.", output.getvalue())
+
+    def test_dispatch_action_shared_network_destroy_cancels_without_confirmation(self) -> None:
+        """Expected: shared-network destroy requires exact yes before dispatch."""
+        environment = self._targets()[0]
+        calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
+        output = io.StringIO()
+
+        result = dispatch_action(
+            "destroy_shared_network",
+            environment,
+            input_func=lambda _: "no",
+            out=output,
+            runner=lambda command, cwd, env_overrides: calls.append((command, cwd, env_overrides)),
+        )
+
+        self.assertFalse(result.switch_environment)
+        self.assertFalse(result.should_quit)
+        self.assertEqual([], calls)
+        self.assertIn("Shared network destroy canceled.", output.getvalue())
 
     def test_dispatch_action_destroy_and_save_requires_non_empty_tag_and_yes(self) -> None:
         """Expected: destroy+save retries empty tag and runs only after exact yes confirm."""
@@ -277,6 +302,29 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
         )
 
         self.assertEqual(1, len(calls))
+        self.assertIsNone(calls[0][2])
+
+    def test_dispatch_action_shared_network_destroy_runs_existing_script_after_confirmation(self) -> None:
+        """Failure: shared-network destroy dispatches via the existing CLI wrapper only after confirm."""
+        environment = self._targets()[0]
+        calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
+
+        result = dispatch_action(
+            "destroy_shared_network",
+            environment,
+            input_func=lambda _: "yes",
+            out=io.StringIO(),
+            runner=lambda command, cwd, env_overrides: calls.append((command, cwd, env_overrides)),
+        )
+
+        self.assertFalse(result.switch_environment)
+        self.assertFalse(result.should_quit)
+        self.assertEqual(1, len(calls))
+        self.assertEqual(
+            ["uv", "run", "../scripts/destroy_shared_network.py"],
+            calls[0][0],
+        )
+        self.assertEqual(environment.stack_dir, calls[0][1])
         self.assertIsNone(calls[0][2])
 
     def test_dispatch_action_destroy_and_save_includes_eip_destroy_when_confirmed(self) -> None:

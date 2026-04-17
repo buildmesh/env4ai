@@ -289,7 +289,8 @@ def parse_action_choice(input_value: str) -> str | None:
         "5": "destroy_and_save",
         "6": "refresh",
         "7": "switch_environment",
-        "8": "quit",
+        "8": "destroy_shared_network",
+        "9": "quit",
         "d": "deploy_default",
         "p": "deploy_pick_ami",
         "s": "save_ami_only",
@@ -297,6 +298,7 @@ def parse_action_choice(input_value: str) -> str | None:
         "dx": "destroy_and_save",
         "r": "refresh",
         "w": "switch_environment",
+        "n": "destroy_shared_network",
         "q": "quit",
     }
     return mapping.get(normalized)
@@ -354,6 +356,7 @@ def build_action_availability(
         ),
         "refresh": ActionAvailability(enabled=True),
         "switch_environment": ActionAvailability(enabled=True),
+        "destroy_shared_network": ActionAvailability(enabled=True),
         "quit": ActionAvailability(enabled=True),
     }
 
@@ -470,6 +473,11 @@ def dispatch_action(
         "--spot-fleet-logical-id",
         environment.spot_fleet_logical_id,
     ]
+    destroy_shared_network_command = [
+        "uv",
+        "run",
+        "../scripts/destroy_shared_network.py",
+    ]
 
     if action == "deploy_default":
         runner(deploy_command, environment.stack_dir, None)
@@ -552,6 +560,17 @@ def dispatch_action(
 
     if action == "switch_environment":
         return ActionResult(switch_environment=True)
+
+    if action == "destroy_shared_network":
+        if not _confirm_exact_yes(
+            prompt="Type 'yes' to destroy shared network infrastructure: ",
+            cancellation_message="Shared network destroy canceled.",
+            input_func=input_func,
+            out=out,
+        ):
+            return ActionResult()
+        runner(destroy_shared_network_command, environment.stack_dir, None)
+        return ActionResult()
 
     if action == "quit":
         return ActionResult(should_quit=True)

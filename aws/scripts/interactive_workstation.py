@@ -106,7 +106,8 @@ def _show_gated_action_menu(availability: dict[str, ActionAvailability]) -> None
         ("5", "destroy_and_save", "Destroy stack + save AMI first"),
         ("6", "refresh", "Refresh status"),
         ("7", "switch_environment", "Switch environment"),
-        ("8", "quit", "Quit"),
+        ("8", "destroy_shared_network", "Destroy shared network"),
+        ("9", "quit", "Quit"),
     ]
 
     print("\nActions:")
@@ -149,9 +150,9 @@ def _run_action_loop(
         current_state = _build_environment_state(status)
         current_availability = build_action_availability(current_state)
         _show_gated_action_menu(current_availability)
-        choice = parse_action_choice(input("Choose action (1-8): "))
+        choice = parse_action_choice(input("Choose action (1-9): "))
         if choice is None:
-            print("Invalid selection. Enter 1-8, or q to quit.")
+            print("Invalid selection. Enter 1-9, or q to quit.")
             continue
         if not current_availability[choice].enabled:
             print(current_availability[choice].disabled_reason or "Action is unavailable.")

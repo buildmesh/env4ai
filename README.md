@@ -106,6 +106,7 @@ Run `make` to open the interactive workstation lifecycle menu. The menu auto-dis
 | **Destroy stack + save AMI first** | Saves an AMI snapshot, then destroys — preserves state before shutting down |
 | **Refresh status** | Re-checks live stack status from AWS |
 | **Switch environment** | Changes the active environment (e.g. from `gastown` to `builder`) |
+| **Destroy shared network** | Runs the existing shared-network teardown command after explicit confirmation; backend checks still block it while workstation stacks exist |
 | **Quit** | Exits the menu |
 
 AMI names use the format `<environment>_<tag>` (for example `gastown_20260301`). Menu actions are gated by current stack state — deploy is disabled when a stack is already running, and save/destroy are disabled when no stack exists. Destructive actions require explicit confirmation.
@@ -117,8 +118,8 @@ AMI names use the format `<environment>_<tag>` (for example `gastown_20260301`).
 Use `ACCESS_MODE` to choose how a workstation is reached at deploy time:
 
 - `ACCESS_MODE=ssh` keeps the existing behavior: SSH ingress from the internet, the EC2 key pair requirement, and SSH config guidance after deploy.
-- `ACCESS_MODE=ssm` attaches the shared SSM instance profile and SSM client security group, does not open inbound SSH, does not require the EC2 key pair, and prints an `aws ssm start-session` command after deploy.
-- `ACCESS_MODE=both` keeps SSH enabled and also attaches the shared SSM resources so the workstation can be reached through either method.
+- `ACCESS_MODE=ssm` attaches the shared SSM instance profile and SSM client security group, does not open inbound SSH, does not require the EC2 key pair, does not assign a public IP or Elastic IP, and prints an `aws ssm start-session` command after deploy.
+- `ACCESS_MODE=both` keeps SSH enabled, retains public IP and Elastic IP behavior, and also attaches the shared SSM resources so the workstation can be reached through either method.
 
 Examples:
 
@@ -128,7 +129,7 @@ make gastown ACCESS_MODE=ssm
 make gastown ACCESS_MODE=both
 ```
 
-If you use `ACCESS_MODE=ssm` or `ACCESS_MODE=both`, install the AWS Session Manager plugin on the machine where you will run `aws ssm start-session`.
+If you use `ACCESS_MODE=ssm` or `ACCESS_MODE=both`, install the AWS Session Manager plugin on the machine where you will run `aws ssm start-session`. Launcher environments also install a local `ssm` helper that now validates its input, resolves region dynamically, and fails clearly when it cannot resolve a matching running instance.
 
 Bootstrap script lookup order:
 - `aws/<environment>/init/<script>`
@@ -176,10 +177,10 @@ AMI_LOAD=20260301 AMI_BOOTSTRAP=1 make gastown
 ```
 
 **Behavior notes:**
-- Every deploy ensures `Env4aiNetworkStack` exists before the environment stack is deployed.
+- The first deploy in an account/region automatically creates `Env4aiNetworkStack`; later environment deploys reuse it without redeploying or updating that shared stack.
 - `ACCESS_MODE` defaults to `ssh` unless an environment overrides `default_access_mode`.
-- `ACCESS_MODE=ssm` omits SSH ingress and the EC2 key pair from the workstation launch.
-- `ACCESS_MODE=both` keeps SSH enabled and also attaches the shared SSM role/profile and SSM client security group.
+- `ACCESS_MODE=ssm` omits SSH ingress, the EC2 key pair, the public IP mapping, and Elastic IP allocation from the workstation launch.
+- `ACCESS_MODE=both` keeps SSH enabled, keeps public IP and Elastic IP behavior, and also attaches the shared SSM role/profile and SSM client security group.
 - `AMI_LOAD` and `AMI_LIST` are mutually exclusive; invalid combinations fail fast.
 - `AMI_PICK=1` is only valid with `AMI_LIST=1`.
 - AMI list/load modes run an IAM preflight and fail early with remediation if `ec2:DescribeImages` is missing.

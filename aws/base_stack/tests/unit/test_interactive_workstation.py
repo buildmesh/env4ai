@@ -45,7 +45,7 @@ class InteractiveWorkstationScriptTests(unittest.TestCase):
                     WorkstationStatus(stack_state="not found", stack_status=None),
                 ],
             ),
-            patch("builtins.input", side_effect=["3", "8"]),
+            patch("builtins.input", side_effect=["3", "9"]),
             patch("interactive_workstation.dispatch_action", return_value=ActionResult(should_quit=True)) as dispatch,
             patch("builtins.print") as mocked_print,
         ):
@@ -74,7 +74,7 @@ class InteractiveWorkstationScriptTests(unittest.TestCase):
                     WorkstationStatus(stack_state="running", stack_status="CREATE_COMPLETE"),
                 ],
             ),
-            patch("builtins.input", side_effect=["1", "8"]),
+            patch("builtins.input", side_effect=["1", "9"]),
             patch("interactive_workstation.dispatch_action", return_value=ActionResult(should_quit=True)) as dispatch,
             patch("builtins.print") as mocked_print,
         ):
