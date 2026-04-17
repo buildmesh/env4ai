@@ -11,6 +11,7 @@ _BASE_STACK = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_BASE_STACK))
 
 from workstation.env4ai_network_stack import Env4aiNetworkStack
+from workstation_core.config import get_shared_network_export_name
 
 
 class Env4aiNetworkStackTests(unittest.TestCase):
@@ -116,6 +117,33 @@ class Env4aiNetworkStackTests(unittest.TestCase):
         self.assertIn("VpcCidr", outputs)
         self.assertIn("SsmClientsSecurityGroupId", outputs)
         self.assertIn("SsmInstanceProfileArn", outputs)
+
+    def test_network_stack_exports_stable_shared_resource_names(self) -> None:
+        """Expected: workstation stacks can import shared-network resources by fixed export names."""
+        app = core.App()
+        stack = Env4aiNetworkStack(app, "Env4aiNetworkStack", env=self._test_env())
+        outputs = assertions.Template.from_stack(stack).to_json()["Outputs"]
+
+        self.assertEqual(
+            get_shared_network_export_name("VpcId"),
+            outputs["VpcId"]["Export"]["Name"],
+        )
+        self.assertEqual(
+            get_shared_network_export_name("InternetGatewayId"),
+            outputs["InternetGatewayId"]["Export"]["Name"],
+        )
+        self.assertEqual(
+            get_shared_network_export_name("VpcCidr"),
+            outputs["VpcCidr"]["Export"]["Name"],
+        )
+        self.assertEqual(
+            get_shared_network_export_name("SsmClientsSecurityGroupId"),
+            outputs["SsmClientsSecurityGroupId"]["Export"]["Name"],
+        )
+        self.assertEqual(
+            get_shared_network_export_name("SsmInstanceProfileArn"),
+            outputs["SsmInstanceProfileArn"]["Export"]["Name"],
+        )
 
 
 if __name__ == "__main__":

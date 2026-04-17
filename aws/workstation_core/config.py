@@ -48,6 +48,14 @@ def get_shared_network_config() -> SharedNetworkConfig:
     return _SHARED_NETWORK_CONFIG
 
 
+def get_shared_network_export_name(output_name: str) -> str:
+    """Return the stable CloudFormation export name for a shared-network output."""
+    normalized_output_name = output_name.strip()
+    if not normalized_output_name:
+        raise ValueError("output_name must be non-empty.")
+    return f"{_SHARED_NETWORK_CONFIG.stack_name}:{normalized_output_name}"
+
+
 def validate_config(config: CoreConfig) -> None:
     """Validate a ``CoreConfig`` for required non-empty fields.
 

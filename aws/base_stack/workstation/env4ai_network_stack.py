@@ -6,6 +6,7 @@ from aws_cdk import Annotations, CfnOutput, Fn, Stack, Tags, aws_ec2 as ec2, aws
 from constructs import Construct
 
 from workstation_core import get_shared_network_config
+from workstation_core.config import get_shared_network_export_name
 
 _SSM_ENDPOINT_SUBNET_CIDR = "10.0.250.0/24"
 _EC2MESSAGES_UNSUPPORTED_REGIONS = frozenset(
@@ -141,28 +142,38 @@ class Env4aiNetworkStack(Stack):
                 "Skipping ec2messages endpoint because this region does not support it."
             )
 
-        CfnOutput(self, "VpcId", value=self.vpc.vpc_id, description="Shared env4ai VPC id.")
+        CfnOutput(
+            self,
+            "VpcId",
+            value=self.vpc.vpc_id,
+            description="Shared env4ai VPC id.",
+            export_name=get_shared_network_export_name("VpcId"),
+        )
         CfnOutput(
             self,
             "InternetGatewayId",
             value=self.internet_gateway.ref,
             description="Shared env4ai Internet Gateway id.",
+            export_name=get_shared_network_export_name("InternetGatewayId"),
         )
         CfnOutput(
             self,
             "VpcCidr",
             value=shared_network.vpc_cidr,
             description="Shared env4ai VPC CIDR.",
+            export_name=get_shared_network_export_name("VpcCidr"),
         )
         CfnOutput(
             self,
             "SsmClientsSecurityGroupId",
             value=self.ssm_clients_sg.security_group_id,
             description="Shared security group for workstation SSM clients.",
+            export_name=get_shared_network_export_name("SsmClientsSecurityGroupId"),
         )
         CfnOutput(
             self,
             "SsmInstanceProfileArn",
             value=self.ssm_instance_profile.attr_arn,
             description="Shared EC2 instance profile for Session Manager access.",
+            export_name=get_shared_network_export_name("SsmInstanceProfileArn"),
         )

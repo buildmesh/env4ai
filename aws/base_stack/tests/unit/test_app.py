@@ -21,6 +21,16 @@ from environment_config import ENVIRONMENT_SPEC
 
 
 class AppResolverTests(unittest.TestCase):
+    @staticmethod
+    def _shared_network_imports() -> Mock:
+        """Return deterministic imported shared-network resources for app tests."""
+        return Mock(
+            vpc="vpc",
+            internet_gateway_id="igw",
+            ssm_clients_security_group_id="sg-ssm",
+            ssm_instance_profile_arn="arn:aws:iam::111111111111:instance-profile/ssm",
+        )
+
     def test_get_account_raises_when_env_and_secret_missing(self) -> None:
         """Failure: account resolution fails when env and secret are unavailable."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -72,22 +82,15 @@ class AppResolverTests(unittest.TestCase):
             patch("app.get_account", return_value="111111111111"),
             patch("app.get_region", return_value="us-west-2"),
             patch(
-                "app.Env4aiNetworkStack",
-                return_value=Mock(
-                    vpc="vpc",
-                    internet_gateway=Mock(ref="igw"),
-                    ssm_clients_sg=Mock(security_group_id="sg-ssm"),
-                    ssm_instance_profile=Mock(attr_arn="arn:aws:iam::111111111111:instance-profile/ssm"),
-                ),
-            ) as network_stack_mock,
+                "app.load_shared_network_imports",
+                return_value=self._shared_network_imports(),
+            ) as load_shared_network_imports,
             patch("app.WorkstationStack") as stack_mock,
         ):
             base_app.main()
 
-        network_stack_mock.assert_called_once_with(
+        load_shared_network_imports.assert_called_once_with(
             app_instance,
-            "Env4aiNetworkStack",
-            env=environment_obj,
         )
         stack_mock.assert_called_once_with(
             app_instance,
@@ -120,13 +123,8 @@ class AppResolverTests(unittest.TestCase):
             patch("app.get_account", return_value="111111111111"),
             patch("app.get_region", return_value="us-west-2"),
             patch(
-                "app.Env4aiNetworkStack",
-                return_value=Mock(
-                    vpc="vpc",
-                    internet_gateway=Mock(ref="igw"),
-                    ssm_clients_sg=Mock(security_group_id="sg-ssm"),
-                    ssm_instance_profile=Mock(attr_arn="arn:aws:iam::111111111111:instance-profile/ssm"),
-                ),
+                "app.load_shared_network_imports",
+                return_value=self._shared_network_imports(),
             ),
             patch("app.WorkstationStack") as stack_mock,
         ):
@@ -163,13 +161,8 @@ class AppResolverTests(unittest.TestCase):
             patch("app.get_account", return_value="111111111111"),
             patch("app.get_region", return_value="us-west-2"),
             patch(
-                "app.Env4aiNetworkStack",
-                return_value=Mock(
-                    vpc="vpc",
-                    internet_gateway=Mock(ref="igw"),
-                    ssm_clients_sg=Mock(security_group_id="sg-ssm"),
-                    ssm_instance_profile=Mock(attr_arn="arn:aws:iam::111111111111:instance-profile/ssm"),
-                ),
+                "app.load_shared_network_imports",
+                return_value=self._shared_network_imports(),
             ),
             patch("app.WorkstationStack") as stack_mock,
         ):
@@ -206,13 +199,8 @@ class AppResolverTests(unittest.TestCase):
             patch("app.get_account", return_value="111111111111"),
             patch("app.get_region", return_value="us-west-2"),
             patch(
-                "app.Env4aiNetworkStack",
-                return_value=Mock(
-                    vpc="vpc",
-                    internet_gateway=Mock(ref="igw"),
-                    ssm_clients_sg=Mock(security_group_id="sg-ssm"),
-                    ssm_instance_profile=Mock(attr_arn="arn:aws:iam::111111111111:instance-profile/ssm"),
-                ),
+                "app.load_shared_network_imports",
+                return_value=self._shared_network_imports(),
             ),
             patch("app.WorkstationStack") as stack_mock,
         ):
