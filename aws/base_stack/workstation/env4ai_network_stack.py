@@ -77,13 +77,8 @@ class Env4aiNetworkStack(Stack):
             self,
             "SsmClientsSecurityGroup",
             vpc=self.vpc,
-            allow_all_outbound=False,
+            allow_all_outbound=True,
             description="Security group attached to instances that use Session Manager.",
-        )
-        self.ssm_clients_sg.add_egress_rule(
-            self.ssm_endpoints_sg,
-            ec2.Port.tcp(443),
-            "Allow HTTPS to SSM interface endpoints",
         )
         self.ssm_endpoints_sg.add_ingress_rule(
             self.ssm_clients_sg,

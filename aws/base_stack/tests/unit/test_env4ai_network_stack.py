@@ -89,19 +89,36 @@ class Env4aiNetworkStackTests(unittest.TestCase):
         template = assertions.Template.from_stack(stack)
 
         template.has_resource_properties(
-            "AWS::EC2::SecurityGroupEgress",
+            "AWS::EC2::SecurityGroup",
             {
-                "FromPort": 443,
-                "ToPort": 443,
-                "IpProtocol": "tcp",
+                "GroupDescription": "Security group attached to instances that use Session Manager.",
+                "SecurityGroupEgress": assertions.Match.array_with(
+                    [
+                        assertions.Match.object_like(
+                            {
+                                "CidrIp": "0.0.0.0/0",
+                                "IpProtocol": "-1",
+                            }
+                        )
+                    ]
+                ),
             },
         )
         template.has_resource_properties(
-            "AWS::EC2::SecurityGroupIngress",
+            "AWS::EC2::SecurityGroup",
             {
-                "FromPort": 443,
-                "ToPort": 443,
-                "IpProtocol": "tcp",
+                "GroupDescription": "Shared interface endpoint security group for SSM access.",
+                "SecurityGroupIngress": assertions.Match.array_with(
+                    [
+                        assertions.Match.object_like(
+                            {
+                                "FromPort": 443,
+                                "ToPort": 443,
+                                "IpProtocol": "tcp",
+                            }
+                        )
+                    ]
+                ),
             },
         )
 
