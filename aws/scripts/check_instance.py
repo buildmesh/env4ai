@@ -9,6 +9,7 @@ from datetime import datetime
 import importlib.util
 import os
 from pathlib import Path
+from time import sleep
 from typing import Any
 
 import boto3
@@ -308,6 +309,7 @@ def main() -> int:
             print("Public IP not assigned yet; cannot associate Elastic IP. Wait a moment, then run this script again.")
             return 1
         try:
+            sleep(5)
             ec2_client.associate_address(
                 AllocationId=eip_allocation_id,
                 InstanceId=instance_id,
