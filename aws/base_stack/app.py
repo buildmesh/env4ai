@@ -3,7 +3,6 @@ import os
 from pathlib import Path
 import sys
 import aws_cdk as cdk
-from aws_cdk import aws_ec2 as ec2
 from dataclasses import dataclass
 
 # Reason: when invoked as `python3 ../base_stack/app.py` from an env dir, CWD
@@ -30,22 +29,18 @@ _VALID_ACCESS_MODES = frozenset({"ssh", "ssm", "both"})
 class SharedNetworkImports:
     """Imported shared-network resources used by the workstation stack."""
 
-    vpc: ec2.IVpc
+    vpc_id: str
+    vpc_cidr_block: str
     internet_gateway_id: str
     ssm_clients_security_group_id: str
     ssm_instance_profile_arn: str
 
 
-def load_shared_network_imports(scope: cdk.App) -> SharedNetworkImports:
-    """Import shared-network resources from stable CloudFormation exports."""
+def load_shared_network_imports() -> SharedNetworkImports:
+    """Load shared-network CloudFormation imports as stack-local tokens."""
     return SharedNetworkImports(
-        vpc=ec2.Vpc.from_vpc_attributes(
-            scope,
-            "SharedNetworkVpc",
-            availability_zones=[cdk.Fn.select(0, cdk.Fn.get_azs())],
-            vpc_id=cdk.Fn.import_value(get_shared_network_export_name("VpcId")),
-            vpc_cidr_block=cdk.Fn.import_value(get_shared_network_export_name("VpcCidr")),
-        ),
+        vpc_id=cdk.Fn.import_value(get_shared_network_export_name("VpcId")),
+        vpc_cidr_block=cdk.Fn.import_value(get_shared_network_export_name("VpcCidr")),
         internet_gateway_id=cdk.Fn.import_value(
             get_shared_network_export_name("InternetGatewayId")
         ),
@@ -84,13 +79,14 @@ def main() -> None:
         access_mode = access_mode_context
     eip_allocation_id = parse_optional_text_context(app.node.try_get_context("eip_allocation_id"))
     env = cdk.Environment(account=get_account(), region=get_region())
-    shared_network = load_shared_network_imports(app)
+    shared_network = load_shared_network_imports()
 
     workstation_stack = WorkstationStack(
         app,
         ENVIRONMENT_SPEC.stack_name,
-        shared_vpc=shared_network.vpc,
         shared_igw_id=shared_network.internet_gateway_id,
+        shared_vpc_id=shared_network.vpc_id,
+        shared_vpc_cidr_block=shared_network.vpc_cidr_block,
         ami_id_override=ami_id_override,
         bootstrap_on_restored_ami=bootstrap_on_restored_ami,
         verbose_bootstrap_resolution=verbose_bootstrap_resolution,

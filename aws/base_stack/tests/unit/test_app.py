@@ -25,7 +25,8 @@ class AppResolverTests(unittest.TestCase):
     def _shared_network_imports() -> Mock:
         """Return deterministic imported shared-network resources for app tests."""
         return Mock(
-            vpc="vpc",
+            vpc_id="vpc-123",
+            vpc_cidr_block="10.0.0.0/16",
             internet_gateway_id="igw",
             ssm_clients_security_group_id="sg-ssm",
             ssm_instance_profile_arn="arn:aws:iam::111111111111:instance-profile/ssm",
@@ -89,14 +90,13 @@ class AppResolverTests(unittest.TestCase):
         ):
             base_app.main()
 
-        load_shared_network_imports.assert_called_once_with(
-            app_instance,
-        )
+        load_shared_network_imports.assert_called_once_with()
         stack_mock.assert_called_once_with(
             app_instance,
             ENVIRONMENT_SPEC.stack_name,
-            shared_vpc="vpc",
             shared_igw_id="igw",
+            shared_vpc_id="vpc-123",
+            shared_vpc_cidr_block="10.0.0.0/16",
             ami_id_override=None,
             bootstrap_on_restored_ami=False,
             verbose_bootstrap_resolution=False,
@@ -133,8 +133,9 @@ class AppResolverTests(unittest.TestCase):
         stack_mock.assert_called_once_with(
             app_instance,
             ENVIRONMENT_SPEC.stack_name,
-            shared_vpc="vpc",
             shared_igw_id="igw",
+            shared_vpc_id="vpc-123",
+            shared_vpc_cidr_block="10.0.0.0/16",
             ami_id_override="ami-override123",
             bootstrap_on_restored_ami=False,
             verbose_bootstrap_resolution=False,
@@ -171,8 +172,9 @@ class AppResolverTests(unittest.TestCase):
         stack_mock.assert_called_once_with(
             app_instance,
             ENVIRONMENT_SPEC.stack_name,
-            shared_vpc="vpc",
             shared_igw_id="igw",
+            shared_vpc_id="vpc-123",
+            shared_vpc_cidr_block="10.0.0.0/16",
             ami_id_override=None,
             bootstrap_on_restored_ami=False,
             verbose_bootstrap_resolution=True,

@@ -27,8 +27,10 @@ class WorkstationStack(Stack):
         self,
         scope: Construct,
         construct_id: str,
-        shared_vpc: ec2.IVpc,
         shared_igw_id: str,
+        shared_vpc: ec2.IVpc | None = None,
+        shared_vpc_id: str | None = None,
+        shared_vpc_cidr_block: str | None = None,
         availability_zone_index: int = 0,
         ami_id_override: str | None = None,
         ami_source: Literal["default", "selected"] | None = None,
@@ -47,6 +49,10 @@ class WorkstationStack(Stack):
         Args:
             scope: Construct scope.
             construct_id: Logical construct id.
+            shared_vpc: Shared VPC imported from ``Env4aiNetworkStack`` when already resolved.
+            shared_igw_id: Shared Internet Gateway id from ``Env4aiNetworkStack``.
+            shared_vpc_id: Shared VPC id used when the stack must import the VPC internally.
+            shared_vpc_cidr_block: Shared VPC CIDR used with ``shared_vpc_id`` imports.
             availability_zone_index: Selected AZ index for workstation subnet.
             ami_id_override: Optional explicit AMI ID used for deploy-time restore flows.
             ami_source: AMI source mode for workstation launch. When unset, legacy
@@ -58,8 +64,6 @@ class WorkstationStack(Stack):
             access_mode: Workstation access mode (`ssh`, `ssm`, or `both`).
             shared_ssm_clients_security_group_id: Shared SSM client SG ID from network stack.
             shared_ssm_instance_profile_arn: Shared SSM instance profile ARN from network stack.
-            shared_vpc: Shared VPC imported from ``Env4aiNetworkStack``.
-            shared_igw_id: Shared Internet Gateway id from ``Env4aiNetworkStack``.
             environment_spec: Canonical environment configuration and naming source.
             **kwargs: Additional ``Stack`` keyword args.
         """
@@ -76,6 +80,19 @@ class WorkstationStack(Stack):
                 raise ValueError(
                     "shared_ssm_instance_profile_arn is required for access_mode 'ssm' or 'both'"
                 )
+        resolved_shared_vpc = shared_vpc
+        if resolved_shared_vpc is None:
+            if not shared_vpc_id:
+                raise ValueError("shared_vpc or shared_vpc_id is required")
+            if not shared_vpc_cidr_block:
+                raise ValueError("shared_vpc_cidr_block is required when shared_vpc is not provided")
+            resolved_shared_vpc = ec2.Vpc.from_vpc_attributes(
+                self,
+                "SharedNetworkVpc",
+                availability_zones=[Stack.of(self).availability_zones[0]],
+                vpc_id=shared_vpc_id,
+                vpc_cidr_block=shared_vpc_cidr_block,
+            )
 
         requires_public_connectivity = _requires_public_connectivity(access_mode)
 
@@ -90,14 +107,14 @@ class WorkstationStack(Stack):
         local_zone_subnet = ec2.CfnSubnet(self, environment_spec.construct_id("Subnet"),
             availability_zone=resolve_subnet_availability_zone(availability_zone_index),
             cidr_block=environment_spec.subnet_cidr,
-            vpc_id=shared_vpc.vpc_id,
+            vpc_id=resolved_shared_vpc.vpc_id,
             map_public_ip_on_launch=requires_public_connectivity
         )
 
         route_table = ec2.CfnRouteTable(
             self,
             environment_spec.construct_id("RouteTable"),
-            vpc_id=shared_vpc.vpc_id,
+            vpc_id=resolved_shared_vpc.vpc_id,
         )
         ec2.CfnRoute(
             self,
@@ -116,7 +133,7 @@ class WorkstationStack(Stack):
         ssh_sg = ec2.SecurityGroup(
             self,
             environment_spec.construct_id("SshSecurityGroup"),
-            vpc=shared_vpc,
+            vpc=resolved_shared_vpc,
         )
         if requires_public_connectivity:
             ssh_sg.add_ingress_rule(ec2.Peer.any_ipv4(), ec2.Port.tcp(22), "Allow SSH")
