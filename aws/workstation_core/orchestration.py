@@ -274,6 +274,7 @@ def deploy_stack(
     bootstrap_on_restored_ami: bool,
     eip_allocation_id: str | None = None,
     access_mode: str | None = None,
+    public_ip_enabled: bool | None = None,
 ) -> None:
     """Deploy CDK stack with optional AMI, bootstrap, and EIP context."""
     command: list[str] = ["uv", "run", "cdk", "deploy", "--require-approval", "never", stack_name]
@@ -285,6 +286,8 @@ def deploy_stack(
         command.extend(["-c", f"eip_allocation_id={eip_allocation_id}"])
     if access_mode:
         command.extend(["-c", f"access_mode={access_mode}"])
+    if public_ip_enabled is not None:
+        command.extend(["-c", f"public_ip_enabled={'true' if public_ip_enabled else 'false'}"])
     run_command(
         command,
         cwd=stack_dir,
@@ -374,8 +377,43 @@ def resolve_access_mode(
     return resolved
 
 
-def requires_public_connectivity(access_mode: str) -> bool:
-    """Return whether the access mode requires public IP and Elastic IP behavior."""
+def _parse_optional_bool_env(value: str | None, env_var: str) -> bool | None:
+    """Parse an optional boolean environment variable into ``True``/``False``."""
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if not normalized:
+        return None
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise RuntimeError(
+        f"{env_var} must be one of: 1/0, true/false, yes/no, on/off."
+    )
+
+
+def resolve_public_ip_enabled(
+    *,
+    env: Mapping[str, str],
+    access_mode: str,
+) -> bool:
+    """Resolve whether the workstation subnet should map a public IP on launch."""
+    if access_mode not in {"ssh", "ssm", "both"}:
+        raise RuntimeError("ACCESS_MODE must be one of: ssh, ssm, both.")
+    configured_value = _parse_optional_bool_env(
+        env.get("OUTBOUND_INTERNET"),
+        "OUTBOUND_INTERNET",
+    )
+    if access_mode in {"ssh", "both"}:
+        return True
+    if configured_value is not None:
+        return configured_value
+    return False
+
+
+def requires_elastic_ip(access_mode: str) -> bool:
+    """Return whether the access mode needs SSH-style Elastic IP behavior."""
     if access_mode not in {"ssh", "ssm", "both"}:
         raise RuntimeError("ACCESS_MODE must be one of: ssh, ssm, both.")
     return access_mode in {"ssh", "both"}
@@ -496,7 +534,8 @@ def run_deploy_lifecycle(
         env=environment,
         environment_spec=environment_spec,
     )
-    needs_public_connectivity = requires_public_connectivity(access_mode)
+    public_ip_enabled = resolve_public_ip_enabled(env=environment, access_mode=access_mode)
+    needs_elastic_ip = requires_elastic_ip(access_mode)
 
     ec2_client = make_ec2_client(profile=profile, region=region)
     selection = resolve_ami_selection(
@@ -512,7 +551,7 @@ def run_deploy_lifecycle(
     if not shared_network_stack_exists(profile=profile, region=region):
         deploy_shared_network_stack(stack_dir=inputs.stack_dir)
     eip_info: Mapping[str, str] | None = None
-    if needs_public_connectivity:
+    if needs_elastic_ip:
         eip_info = find_or_create_eip(ec2_client=ec2_client, name=environment_key)
     deploy_stack(
         stack_dir=inputs.stack_dir,
@@ -521,6 +560,7 @@ def run_deploy_lifecycle(
         bootstrap_on_restored_ami=mode.ami_bootstrap,
         eip_allocation_id=eip_info["allocation_id"] if eip_info is not None else None,
         access_mode=access_mode,
+        public_ip_enabled=public_ip_enabled,
     )
     time.sleep(5)
     run_post_deploy_check(

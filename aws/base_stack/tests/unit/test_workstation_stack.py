@@ -168,6 +168,29 @@ class WorkstationStackTests(unittest.TestCase):
             {"MapPublicIpOnLaunch": False},
         )
 
+    def test_ssm_mode_can_enable_public_ip_for_outbound_internet(self) -> None:
+        """Edge: SSM-only mode can map a public IP without enabling SSH ingress."""
+        app = core.App()
+        stack = self._make_stack(
+            app,
+            "aws-workstation-ssm-public-ip",
+            access_mode="ssm",
+            public_ip_enabled=True,
+        )
+        template = assertions.Template.from_stack(stack)
+        template_json = template.to_json()
+        launch_spec = template_json["Resources"]["TestSpotFleet"]["Properties"][
+            "SpotFleetRequestConfigData"
+        ]["LaunchSpecifications"][0]
+
+        self.assertEqual({}, template.find_resources("AWS::EC2::SecurityGroupIngress"))
+        self.assertNotIn("KeyName", launch_spec)
+        self.assertIn("IamInstanceProfile", launch_spec)
+        template.has_resource_properties(
+            "AWS::EC2::Subnet",
+            {"MapPublicIpOnLaunch": True},
+        )
+
     def test_both_mode_keeps_ssh_and_attaches_instance_profile(self) -> None:
         """Edge: dual access mode preserves SSH while attaching SSM profile."""
         app = core.App()

@@ -7,6 +7,7 @@ DOCKER_COMPOSE_RUN := docker compose run --rm \
 	-e CDK_DEFAULT_REGION \
 	-e CDK_DEFAULT_ACCOUNT \
 	-e ACCESS_MODE \
+	-e OUTBOUND_INTERNET \
 	-e AMI_LOAD \
 	-e AMI_LIST \
 	-e AMI_PICK \

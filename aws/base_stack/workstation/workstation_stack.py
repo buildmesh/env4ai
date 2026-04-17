@@ -16,8 +16,8 @@ from workstation_core.cdk_helpers import (
 )
 
 
-def _requires_public_connectivity(access_mode: Literal["ssh", "ssm", "both"]) -> bool:
-    """Return whether the access mode needs public IP-based connectivity."""
+def _requires_public_ssh(access_mode: Literal["ssh", "ssm", "both"]) -> bool:
+    """Return whether the access mode needs SSH-facing public connectivity."""
     return access_mode in {"ssh", "both"}
 
 
@@ -39,6 +39,7 @@ class WorkstationStack(Stack):
         verbose_bootstrap_resolution: bool = False,
         eip_allocation_id: str | None = None,
         access_mode: Literal["ssh", "ssm", "both"] = "ssh",
+        public_ip_enabled: bool | None = None,
         shared_ssm_clients_security_group_id: str | None = None,
         shared_ssm_instance_profile_arn: str | None = None,
         environment_spec: EnvironmentSpec = ENVIRONMENT_SPEC,
@@ -62,6 +63,7 @@ class WorkstationStack(Stack):
             verbose_bootstrap_resolution: Print resolved bootstrap script paths.
             eip_allocation_id: Optional Elastic IP allocation ID to track in stack outputs.
             access_mode: Workstation access mode (`ssh`, `ssm`, or `both`).
+            public_ip_enabled: Explicit public IPv4 mapping override for outbound access.
             shared_ssm_clients_security_group_id: Shared SSM client SG ID from network stack.
             shared_ssm_instance_profile_arn: Shared SSM instance profile ARN from network stack.
             environment_spec: Canonical environment configuration and naming source.
@@ -94,7 +96,11 @@ class WorkstationStack(Stack):
                 vpc_cidr_block=shared_vpc_cidr_block,
             )
 
-        requires_public_connectivity = _requires_public_connectivity(access_mode)
+        requires_public_ssh = _requires_public_ssh(access_mode)
+        if public_ip_enabled is None:
+            public_ip_enabled = requires_public_ssh
+        if requires_public_ssh:
+            public_ip_enabled = True
 
         if eip_allocation_id:
             CfnOutput(
@@ -108,7 +114,7 @@ class WorkstationStack(Stack):
             availability_zone=resolve_subnet_availability_zone(availability_zone_index),
             cidr_block=environment_spec.subnet_cidr,
             vpc_id=resolved_shared_vpc.vpc_id,
-            map_public_ip_on_launch=requires_public_connectivity
+            map_public_ip_on_launch=public_ip_enabled
         )
 
         route_table = ec2.CfnRouteTable(
@@ -135,7 +141,7 @@ class WorkstationStack(Stack):
             environment_spec.construct_id("SshSecurityGroup"),
             vpc=resolved_shared_vpc,
         )
-        if requires_public_connectivity:
+        if requires_public_ssh:
             ssh_sg.add_ingress_rule(ec2.Peer.any_ipv4(), ec2.Port.tcp(22), "Allow SSH")
 
         # Reason: preserve ``ami_id_override`` compatibility while supporting the
@@ -182,7 +188,7 @@ class WorkstationStack(Stack):
         )
 
         security_group_ids: list[str] = []
-        if requires_public_connectivity:
+        if requires_public_ssh:
             security_group_ids.append(ssh_sg.security_group_id)
         if access_mode in {"ssm", "both"} and shared_ssm_clients_security_group_id:
             security_group_ids.append(shared_ssm_clients_security_group_id)
@@ -195,7 +201,7 @@ class WorkstationStack(Stack):
             volume_size=environment_spec.volume_size,
             include_bootstrap_user_data=should_include_bootstrap,
             bootstrap_files=environment_spec.bootstrap_files,
-            key_name="aws_key" if requires_public_connectivity else None,
+            key_name="aws_key" if requires_public_ssh else None,
             iam_instance_profile_arn=(
                 shared_ssm_instance_profile_arn if access_mode in {"ssm", "both"} else None
             ),

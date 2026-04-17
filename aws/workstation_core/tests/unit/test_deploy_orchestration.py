@@ -50,6 +50,7 @@ class DeployOrchestrationTests(unittest.TestCase):
             bootstrap_on_restored_ami=False,
             eip_allocation_id="eipalloc-abc123",
             access_mode="ssh",
+            public_ip_enabled=True,
         )
         post_check.assert_called_once_with(
             stack_dir="/tmp/gastown",
@@ -131,6 +132,7 @@ class DeployOrchestrationTests(unittest.TestCase):
 
         self.assertEqual(0, result)
         self.assertEqual("ssm", deploy_stack.call_args.kwargs["access_mode"])
+        self.assertFalse(deploy_stack.call_args.kwargs["public_ip_enabled"])
 
     def test_run_deploy_lifecycle_skips_eip_allocation_for_ssm_mode(self) -> None:
         """Expected: SSM-only deploys do not allocate or pass through EIP data."""
@@ -156,6 +158,7 @@ class DeployOrchestrationTests(unittest.TestCase):
             bootstrap_on_restored_ami=False,
             eip_allocation_id=None,
             access_mode="ssm",
+            public_ip_enabled=False,
         )
         post_check.assert_called_once_with(
             stack_dir="/tmp/gastown",
@@ -185,6 +188,33 @@ class DeployOrchestrationTests(unittest.TestCase):
         find_or_create_eip.assert_called_once()
         self.assertEqual("eipalloc-abc123", deploy_stack.call_args.kwargs["eip_allocation_id"])
         self.assertEqual("1.2.3.4", post_check.call_args.kwargs["eip_public_ip"])
+        self.assertTrue(deploy_stack.call_args.kwargs["public_ip_enabled"])
+
+    def test_run_deploy_lifecycle_allows_public_ip_without_eip_for_ssm_mode(self) -> None:
+        """Edge: SSM-only deploy can map a public IP for outbound internet without allocating EIP."""
+        env = {"AWS_REGION": "us-west-2", "ACCESS_MODE": "ssm", "OUTBOUND_INTERNET": "1"}
+        selection = Mock(should_deploy=True, selected_ami_id=None)
+
+        with (
+            patch("workstation_core.orchestration.make_ec2_client", return_value=Mock()),
+            patch("workstation_core.orchestration.resolve_ami_selection", return_value=selection),
+            patch("workstation_core.orchestration.shared_network_stack_exists", return_value=True),
+            patch("workstation_core.orchestration.find_or_create_eip") as find_or_create_eip,
+            patch("workstation_core.orchestration.deploy_stack") as deploy_stack,
+            patch("workstation_core.orchestration.run_post_deploy_check") as post_check,
+        ):
+            result = run_deploy_lifecycle(inputs=self._inputs(), env=env, out=io.StringIO())
+
+        self.assertEqual(0, result)
+        find_or_create_eip.assert_not_called()
+        self.assertTrue(deploy_stack.call_args.kwargs["public_ip_enabled"])
+        post_check.assert_called_once_with(
+            stack_dir="/tmp/gastown",
+            stack_name="GastownWorkstationStack",
+            eip_allocation_id=None,
+            eip_public_ip=None,
+            access_mode="ssm",
+        )
 
     def test_run_deploy_lifecycle_exits_early_for_list_only_mode(self) -> None:
         """Edge: AMI list-only mode does not invoke deploy or post-check commands."""

@@ -32,6 +32,7 @@ class InteractiveWorkstationScriptTests(unittest.TestCase):
             stack_name="TestWorkstationStack",
             spot_fleet_logical_id="TestSpotFleet",
             ssh_alias="test-workstation",
+            default_access_mode="ssh",
         )
 
     def test_run_action_loop_blocks_disabled_action_without_dispatch(self) -> None:

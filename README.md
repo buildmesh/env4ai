@@ -95,6 +95,10 @@ Before the first successful `make <environment>` run in a new AWS account:
 
 Run `make` to open the interactive workstation lifecycle menu. The menu auto-discovers available environments from modules under `aws/`.
 
+When you choose either deploy action in interactive mode, the launcher now prompts for:
+- `ACCESS_MODE`, defaulting to the environment's `default_access_mode` from `environment_config.py`
+- outbound internet access, which maps a public IP when enabled
+
 ### Interactive Menu
 
 | Action | What it does |
@@ -118,7 +122,7 @@ AMI names use the format `<environment>_<tag>` (for example `gastown_20260301`).
 Use `ACCESS_MODE` to choose how a workstation is reached at deploy time:
 
 - `ACCESS_MODE=ssh` keeps the existing behavior: SSH ingress from the internet, the EC2 key pair requirement, and SSH config guidance after deploy.
-- `ACCESS_MODE=ssm` attaches the shared SSM instance profile and SSM client security group, does not open inbound SSH, does not require the EC2 key pair, does not assign a public IP or Elastic IP, and prints an `aws ssm start-session` command after deploy.
+- `ACCESS_MODE=ssm` attaches the shared SSM instance profile and SSM client security group, does not open inbound SSH, does not require the EC2 key pair, does not assign an Elastic IP, and prints an `aws ssm start-session` command after deploy. By default it does not map a public IP either, unless `OUTBOUND_INTERNET=1` is set.
 - `ACCESS_MODE=both` keeps SSH enabled, retains public IP and Elastic IP behavior, and also attaches the shared SSM resources so the workstation can be reached through either method.
 
 Examples:
@@ -179,7 +183,8 @@ AMI_LOAD=20260301 AMI_BOOTSTRAP=1 make gastown
 **Behavior notes:**
 - The first deploy in an account/region automatically creates `Env4aiNetworkStack`; later environment deploys reuse it without redeploying or updating that shared stack.
 - `ACCESS_MODE` defaults to `ssh` unless an environment overrides `default_access_mode`.
-- `ACCESS_MODE=ssm` omits SSH ingress, the EC2 key pair, the public IP mapping, and Elastic IP allocation from the workstation launch.
+- `OUTBOUND_INTERNET=1` maps a public IP even for `ACCESS_MODE=ssm`; `OUTBOUND_INTERNET=0` keeps `ssm` mode private. `ssh` and `both` always keep a public IP because direct SSH connectivity depends on it.
+- `ACCESS_MODE=ssm` omits SSH ingress, the EC2 key pair, and Elastic IP allocation from the workstation launch. It also omits public IP mapping unless `OUTBOUND_INTERNET=1` is set.
 - `ACCESS_MODE=both` keeps SSH enabled, keeps public IP and Elastic IP behavior, and also attaches the shared SSM role/profile and SSM client security group.
 - `AMI_LOAD` and `AMI_LIST` are mutually exclusive; invalid combinations fail fast.
 - `AMI_PICK=1` is only valid with `AMI_LIST=1`.

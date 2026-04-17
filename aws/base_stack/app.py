@@ -78,6 +78,15 @@ def main() -> None:
         if access_mode_context not in _VALID_ACCESS_MODES:
             raise RuntimeError("access_mode context must be one of: ssh, ssm, both")
         access_mode = access_mode_context
+    public_ip_enabled = access_mode in {"ssh", "both"}
+    public_ip_enabled_context = app.node.try_get_context("public_ip_enabled")
+    if public_ip_enabled_context is not None:
+        public_ip_enabled = parse_optional_bool_context(
+            value=public_ip_enabled_context,
+            context_key="public_ip_enabled",
+        )
+    if access_mode in {"ssh", "both"}:
+        public_ip_enabled = True
     eip_allocation_id = parse_optional_text_context(app.node.try_get_context("eip_allocation_id"))
     env = cdk.Environment(account=get_account(), region=get_region())
     shared_network_config = get_shared_network_config()
@@ -95,6 +104,7 @@ def main() -> None:
         verbose_bootstrap_resolution=verbose_bootstrap_resolution,
         eip_allocation_id=eip_allocation_id,
         access_mode=access_mode,
+        public_ip_enabled=public_ip_enabled,
         shared_ssm_clients_security_group_id=shared_network.ssm_clients_security_group_id,
         shared_ssm_instance_profile_arn=shared_network.ssm_instance_profile_arn,
         environment_spec=ENVIRONMENT_SPEC,

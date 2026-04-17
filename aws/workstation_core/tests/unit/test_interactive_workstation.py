@@ -39,6 +39,7 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
                 "    stack_name = {!r}\n"
                 "    spot_fleet_logical_id = {!r}\n"
                 "    ssh_alias = {!r}\n\n"
+                "    default_access_mode = {!r}\n\n"
                 "ENVIRONMENT_SPEC = _Spec()\n"
             ).format(
                 environment_key,
@@ -46,6 +47,7 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
                 f"{display_name}WorkstationStack",
                 f"{display_name}SpotFleet",
                 f"{environment_key}-workstation",
+                "ssh",
             ),
             encoding="utf-8",
         )
@@ -97,6 +99,7 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
                 stack_name="GastownWorkstationStack",
                 spot_fleet_logical_id="GastownSpotFleet",
                 ssh_alias="gastown-workstation",
+                default_access_mode="ssh",
             ),
             EnvironmentTarget(
                 environment_key="builder",
@@ -105,6 +108,7 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
                 stack_name="BuilderWorkstationStack",
                 spot_fleet_logical_id="BuilderSpotFleet",
                 ssh_alias="builder-workstation",
+                default_access_mode="ssm",
             ),
         ]
 
@@ -164,8 +168,77 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
         self.assertFalse(result.switch_environment)
         self.assertFalse(result.should_quit)
         self.assertEqual(1, len(calls))
-        self.assertEqual(None, calls[0][2])
+        self.assertEqual(
+            {"ACCESS_MODE": "ssh", "OUTBOUND_INTERNET": "1"},
+            calls[0][2],
+        )
         self.assertIn("../scripts/deploy_workstation.py", calls[0][0])
+
+    def test_dispatch_action_deploy_default_uses_environment_access_mode_default(self) -> None:
+        """Expected: empty access-mode input falls back to the environment spec default."""
+        calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
+        environment = self._targets()[1]
+        inputs = iter(["", ""])
+
+        dispatch_action(
+            "deploy_default",
+            environment,
+            input_func=lambda _: next(inputs),
+            out=io.StringIO(),
+            runner=lambda command, cwd, env_overrides: calls.append((command, cwd, env_overrides)),
+        )
+
+        self.assertEqual(1, len(calls))
+        self.assertEqual(
+            {"ACCESS_MODE": "ssm", "OUTBOUND_INTERNET": "0"},
+            calls[0][2],
+        )
+
+    def test_dispatch_action_deploy_pick_ami_merges_deploy_prompts_with_ami_flags(self) -> None:
+        """Expected: AMI-pick deploy keeps AMI flags while applying prompted deploy settings."""
+        calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
+        environment = self._targets()[1]
+        inputs = iter(["", "y"])
+
+        dispatch_action(
+            "deploy_pick_ami",
+            environment,
+            input_func=lambda _: next(inputs),
+            out=io.StringIO(),
+            runner=lambda command, cwd, env_overrides: calls.append((command, cwd, env_overrides)),
+        )
+
+        self.assertEqual(1, len(calls))
+        self.assertEqual(
+            {
+                "ACCESS_MODE": "ssm",
+                "OUTBOUND_INTERNET": "1",
+                "AMI_LIST": "1",
+                "AMI_PICK": "1",
+            },
+            calls[0][2],
+        )
+
+    def test_dispatch_action_deploy_forces_public_ip_for_ssh_mode(self) -> None:
+        """Edge: SSH-capable access modes force public IP even when the user answers no."""
+        calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
+        output = io.StringIO()
+        environment = self._targets()[0]
+        inputs = iter(["ssh", "n"])
+
+        dispatch_action(
+            "deploy_default",
+            environment,
+            input_func=lambda _: next(inputs),
+            out=output,
+            runner=lambda command, cwd, env_overrides: calls.append((command, cwd, env_overrides)),
+        )
+
+        self.assertEqual(
+            {"ACCESS_MODE": "ssh", "OUTBOUND_INTERNET": "1"},
+            calls[0][2],
+        )
+        self.assertIn("SSH-capable access modes require a public IP.", output.getvalue())
 
     def test_build_action_availability_disables_deploy_actions_when_deployed(self) -> None:
         """Expected: deployed state disables deploy actions with a reason."""

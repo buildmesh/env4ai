@@ -21,6 +21,7 @@ class EnvironmentTarget:
         stack_name: CloudFormation stack name.
         spot_fleet_logical_id: Spot Fleet logical resource id.
         ssh_alias: SSH host alias for the environment.
+        default_access_mode: Default deploy-time access mode from the environment spec.
     """
 
     environment_key: str
@@ -29,6 +30,7 @@ class EnvironmentTarget:
     stack_name: str
     spot_fleet_logical_id: str
     ssh_alias: str
+    default_access_mode: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,6 +129,9 @@ def discover_environments(aws_root: Path, out: TextIO) -> list[EnvironmentTarget
             stack_name = str(environment_spec.stack_name).strip()
             spot_fleet_logical_id = str(environment_spec.spot_fleet_logical_id).strip()
             ssh_alias = str(environment_spec.ssh_alias).strip()
+            default_access_mode = (
+                str(getattr(environment_spec, "default_access_mode", "ssh")).strip() or "ssh"
+            )
         except Exception as err:
             out.write(f"Warning: skipping '{child.name}' (malformed environment spec: {err})\n")
             continue
@@ -138,6 +143,7 @@ def discover_environments(aws_root: Path, out: TextIO) -> list[EnvironmentTarget
                 stack_name,
                 spot_fleet_logical_id,
                 ssh_alias,
+                default_access_mode,
             ]
         ):
             out.write(f"Warning: skipping '{child.name}' (missing required environment fields)\n")
@@ -151,6 +157,7 @@ def discover_environments(aws_root: Path, out: TextIO) -> list[EnvironmentTarget
                 stack_name=stack_name,
                 spot_fleet_logical_id=spot_fleet_logical_id,
                 ssh_alias=ssh_alias,
+                default_access_mode=default_access_mode,
             )
         )
 
@@ -404,6 +411,76 @@ def _prompt_yes_no(*, prompt: str, input_func: Callable[[str], str]) -> bool:
     return response in ("y", "yes")
 
 
+def _prompt_yes_no_default(
+    *,
+    prompt: str,
+    default: bool,
+    input_func: Callable[[str], str],
+    out: TextIO,
+) -> bool:
+    """Prompt for a yes/no response with retry behavior and an explicit default."""
+    while True:
+        response = input_func(prompt).strip().lower()
+        if not response:
+            return default
+        if response in {"y", "yes"}:
+            return True
+        if response in {"n", "no"}:
+            return False
+        out.write("Enter y or n.\n")
+
+
+def _prompt_access_mode(
+    *,
+    default_access_mode: str,
+    input_func: Callable[[str], str],
+    out: TextIO,
+) -> str:
+    """Prompt for deploy-time access mode, defaulting to the environment spec."""
+    while True:
+        response = input_func(
+            f"Access mode [ssh/ssm/both] (default: {default_access_mode}): "
+        ).strip().lower()
+        if not response:
+            return default_access_mode
+        if response in {"ssh", "ssm", "both"}:
+            return response
+        out.write("Access mode must be one of: ssh, ssm, both.\n")
+
+
+def _build_deploy_env_overrides(
+    environment: EnvironmentTarget,
+    *,
+    input_func: Callable[[str], str],
+    out: TextIO,
+) -> dict[str, str]:
+    """Prompt for deploy options and return environment overrides."""
+    access_mode = _prompt_access_mode(
+        default_access_mode=environment.default_access_mode,
+        input_func=input_func,
+        out=out,
+    )
+    default_outbound_internet = access_mode in {"ssh", "both"}
+    outbound_choice = _prompt_yes_no_default(
+        prompt=(
+            "Enable outbound internet access via public IP "
+            f"[{'Y/n' if default_outbound_internet else 'y/N'}]: "
+        ),
+        default=default_outbound_internet,
+        input_func=input_func,
+        out=out,
+    )
+    if access_mode in {"ssh", "both"} and not outbound_choice:
+        out.write(
+            "SSH-capable access modes require a public IP. Enabling outbound internet access.\n"
+        )
+        outbound_choice = True
+    return {
+        "ACCESS_MODE": access_mode,
+        "OUTBOUND_INTERNET": "1" if outbound_choice else "0",
+    }
+
+
 def _confirm_exact_yes(
     *,
     prompt: str,
@@ -480,14 +557,28 @@ def dispatch_action(
     ]
 
     if action == "deploy_default":
-        runner(deploy_command, environment.stack_dir, None)
-        return ActionResult()
-
-    if action == "deploy_pick_ami":
         runner(
             deploy_command,
             environment.stack_dir,
-            {"AMI_LIST": "1", "AMI_PICK": "1"},
+            _build_deploy_env_overrides(
+                environment,
+                input_func=input_func,
+                out=out,
+            ),
+        )
+        return ActionResult()
+
+    if action == "deploy_pick_ami":
+        env_overrides = _build_deploy_env_overrides(
+            environment,
+            input_func=input_func,
+            out=out,
+        )
+        env_overrides.update({"AMI_LIST": "1", "AMI_PICK": "1"})
+        runner(
+            deploy_command,
+            environment.stack_dir,
+            env_overrides,
         )
         return ActionResult()
 
