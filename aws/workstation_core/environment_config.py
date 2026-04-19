@@ -48,6 +48,7 @@ class EnvironmentSpec:
     volume_size: int
     spot_price: str
     default_access_mode: str = "ssh"
+    allowed_ssh_cidr: str | None = None
 
     @property
     def stack_name(self) -> str:
@@ -80,6 +81,40 @@ class EnvironmentSpec:
         """
         return f"{self.display_name}{suffix}"
 
+    @property
+    def resolved_allowed_ssh_cidr(self) -> str | None:
+        """Return the normalized SSH ingress CIDR when one is configured."""
+        return _normalize_allowed_ssh_cidr(self.allowed_ssh_cidr)
+
+
+def _normalize_allowed_ssh_cidr(value: str | None) -> str | None:
+    """Normalize an optional SSH ingress source into a canonical IPv4 CIDR.
+
+    Args:
+        value: Optional IPv4 address or IPv4 CIDR string.
+
+    Returns:
+        Normalized CIDR string or ``None`` when unset.
+
+    Raises:
+        ValueError: If the value is not a valid IPv4 address or CIDR block.
+    """
+    if value is None:
+        return None
+
+    candidate = value.strip()
+    if not candidate:
+        return None
+
+    try:
+        if "/" in candidate:
+            return str(ipaddress.IPv4Network(candidate, strict=True))
+        return f"{ipaddress.IPv4Address(candidate)}/32"
+    except ValueError as exc:
+        raise ValueError(
+            "EnvironmentSpec.allowed_ssh_cidr must be a valid IPv4 address or CIDR block."
+        ) from exc
+
 
 def validate_environment_spec(spec: EnvironmentSpec) -> None:
     """Validate required fields and constraints for an environment spec.
@@ -108,6 +143,7 @@ def validate_environment_spec(spec: EnvironmentSpec) -> None:
         raise ValueError(
             "EnvironmentSpec.default_access_mode must be one of: ssh, ssm, both."
         )
+    _normalize_allowed_ssh_cidr(spec.allowed_ssh_cidr)
     if not spec.default_ami_selector.owner.strip():
         raise ValueError("AmiSelectorConfig.owner must be non-empty.")
     if not spec.default_ami_selector.name.strip():

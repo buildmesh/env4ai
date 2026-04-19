@@ -165,6 +165,30 @@ class EnvironmentSpecTests(unittest.TestCase):
                 )
             )
 
+    def test_validate_environment_spec_rejects_invalid_allowed_ssh_cidr(self) -> None:
+        """Failure: malformed SSH source values are rejected clearly."""
+        with self.assertRaisesRegex(
+            ValueError,
+            "EnvironmentSpec.allowed_ssh_cidr must be a valid IPv4 address or CIDR block.",
+        ):
+            validate_environment_spec(
+                EnvironmentSpec(
+                    environment_key="broken",
+                    display_name="Broken",
+                    bootstrap_files=("deps.sh",),
+                    default_ami_selector=AmiSelectorConfig(
+                        owner="099720109477",
+                        name="ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*",
+                        filters={"architecture": ("x86_64",)},
+                    ),
+                    subnet_cidr="10.0.9.0/24",
+                    instance_type="t3.large",
+                    volume_size=16,
+                    spot_price="0.1",
+                    allowed_ssh_cidr="not-an-ip",
+                )
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

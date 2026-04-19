@@ -142,7 +142,13 @@ class WorkstationStack(Stack):
             vpc=resolved_shared_vpc,
         )
         if requires_public_ssh:
-            ssh_sg.add_ingress_rule(ec2.Peer.any_ipv4(), ec2.Port.tcp(22), "Allow SSH")
+            allowed_ssh_cidr = environment_spec.resolved_allowed_ssh_cidr
+            ssh_peer = (
+                ec2.Peer.ipv4(allowed_ssh_cidr)
+                if allowed_ssh_cidr is not None
+                else ec2.Peer.any_ipv4()
+            )
+            ssh_sg.add_ingress_rule(ssh_peer, ec2.Port.tcp(22), "Allow SSH")
 
         # Reason: preserve ``ami_id_override`` compatibility while supporting the
         # new ``ami_source``/``selected_ami_id`` API.

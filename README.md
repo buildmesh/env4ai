@@ -220,7 +220,7 @@ cdk deploy -c verbose_bootstrap_resolution=true
 - Region/account can be overridden with options/environment variables (for example `CDK_DEFAULT_REGION`, `CDK_DEFAULT_ACCOUNT`, and `--region` where supported by scripts/commands).
 - The shared `env4ai` VPC uses `10.0.0.0/16`; each environment must define a unique `subnet_cidr` inside that range.
 - `Env4aiNetworkStack` now also owns the shared Systems Manager interface endpoints, SSM security groups, and the EC2 instance role/profile used for Session Manager access.
-- `ACCESS_MODE=ssh` and `ACCESS_MODE=both` keep SSH open on port 22 to anywhere (`0.0.0.0/0`); `ACCESS_MODE=ssm` avoids public SSH ingress.
+- `ACCESS_MODE=ssh` and `ACCESS_MODE=both` keep SSH open on port 22 to anywhere (`0.0.0.0/0`) by default. Set `allowed_ssh_cidr` in an environment's `environment_config.py` to restrict SSH ingress to a specific IPv4 address or CIDR. `ACCESS_MODE=ssm` avoids public SSH ingress.
 - Costs apply while infrastructure is running.
 
 ## Project Layout
@@ -247,6 +247,7 @@ Use `aws/workstation_core` as the single source of truth and only keep environme
    - `default_ami_selector`
    - `subnet_cidr` (unique subnet inside the shared `10.0.0.0/16` VPC)
    - `instance_type`, `volume_size`, `spot_price`
+   - optional `allowed_ssh_cidr` to restrict SSH access to one IPv4 address (`203.0.113.10` becomes `/32`) or an IPv4 CIDR (`203.0.113.0/24`)
 3. Keep naming derived from the spec properties instead of hardcoded literals:
    - Stack name: `ENVIRONMENT_SPEC.stack_name`
    - Spot Fleet logical id: `ENVIRONMENT_SPEC.spot_fleet_logical_id`
