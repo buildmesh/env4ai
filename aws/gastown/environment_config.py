@@ -12,6 +12,7 @@ _ENVIRONMENT_SPEC = EnvironmentSpec(
         "android.sh",
         "nodejs.sh",
         "agents.sh",
+        "go.sh",
         "dev.sh",
         "gastown.sh",
     ),
