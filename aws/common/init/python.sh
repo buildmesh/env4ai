@@ -35,7 +35,7 @@ log "uv version:"
 uv --version
 
 log "Installing Python ${PYTHON_VERSION} with uv..."
-sudo -u ubuntu -H -E bash -lc 'cd /tmp && uv python install ${PYTHON_VERSION}'
+sudo -u ubuntu -H -E bash -lc "cd /tmp && uv python install ${PYTHON_VERSION}"
 
 log "Installed Python versions:"
 sudo -u ubuntu -H -E bash -lc 'cd /tmp && uv python list'
