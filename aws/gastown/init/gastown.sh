@@ -7,9 +7,10 @@ export NEEDRESTART_MODE=a
 
 log() { printf '[gastown] %s\n' "$*"; }
 
-log "Installing Gas Town..."
+log "Installing Gas City..."
 
-sudo -u ubuntu PATH="/home/ubuntu/.local/bin:/home/ubuntu/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin" -H bash -lc 'cd /home/ubuntu && git clone https://github.com/steveyegge/gastown.git && cd gastown && make install'
+#sudo -u ubuntu PATH="/home/ubuntu/.local/bin:/home/ubuntu/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin" -H bash -lc 'cd /home/ubuntu && git clone https://github.com/steveyegge/gastown.git && cd gastown && make install'
+sudo -u ubuntu PATH="/home/ubuntu/.local/bin:/home/ubuntu/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin" -H bash -lc 'cd /home/ubuntu && git clone https://github.com/gastownhall/gascity.git && cd gascity && make install'
 
 export PATH="$PATH:/home/ubuntu/.local/bin"
 echo 'export PATH="$PATH:/home/ubuntu/.local/bin"' >> /home/ubuntu/.bashrc
