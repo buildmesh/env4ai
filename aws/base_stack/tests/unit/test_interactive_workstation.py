@@ -54,6 +54,8 @@ class InteractiveWorkstationScriptTests(unittest.TestCase):
                 environment=self._environment(),
                 cloudformation_client=Mock(),
                 ec2_client=Mock(),
+                pricing_client=None,
+                region="us-west-2",
             )
 
         self.assertTrue(result.should_quit)
@@ -83,6 +85,8 @@ class InteractiveWorkstationScriptTests(unittest.TestCase):
                 environment=self._environment(),
                 cloudformation_client=Mock(),
                 ec2_client=Mock(),
+                pricing_client=None,
+                region="us-west-2",
             )
 
         self.assertTrue(result.should_quit)

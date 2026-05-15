@@ -53,6 +53,13 @@ from workstation_core.orchestration import (
     run_stop_orchestration,
     validate_plan,
 )
+from workstation_core.pricing import (
+    PriceQuote,
+    format_price_per_hour,
+    get_current_spot_price,
+    get_on_demand_hourly_price,
+    lookup_deploy_price_quote,
+)
 from workstation_core.runtime import RuntimeContext
 from workstation_core.runtime_resolution import (
     get_account,
@@ -98,6 +105,7 @@ __all__ = [
     "DeployWorkflowInputs",
     "EnvironmentSpec",
     "OrchestrationPlan",
+    "PriceQuote",
     "SharedNetworkConfig",
     "StopOrchestrationInputs",
     "RuntimeContext",
@@ -112,7 +120,11 @@ __all__ = [
     "resolve_ami_id",
     "resolve_subnet_availability_zone",
     "validate_environment_spec",
+    "format_price_per_hour",
+    "get_current_spot_price",
+    "get_on_demand_hourly_price",
     "is_truthy",
+    "lookup_deploy_price_quote",
     "list_environment_images",
     "load_environment_spec",
     "make_ec2_client",

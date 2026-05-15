@@ -60,7 +60,10 @@
         "ec2:DescribeVolumesModifications",
         "ec2:DescribeSpotFleetRequests",
         "ec2:DescribeSpotFleetInstances",
+        "ec2:DescribeSpotPriceHistory",
         "ec2:DescribeInstances",
+        "ec2:RunInstances",
+        "ec2:TerminateInstances",
         "ec2:RequestSpotFleet",
         "ec2:CancelSpotFleetRequests",
         "ec2:AttachVolume",
@@ -177,6 +180,16 @@
           "iam:PassedToService": "ec2.amazonaws.com"
         }
       }
+    },
+    {
+      "Sid": "PricingApiReadOnDemandPrices",
+      "Effect": "Allow",
+      "Action": [
+        "pricing:GetProducts",
+        "pricing:DescribeServices",
+        "pricing:GetAttributeValues"
+      ],
+      "Resource": "*"
     }
   ]
 }

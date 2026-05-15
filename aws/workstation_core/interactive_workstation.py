@@ -9,6 +9,8 @@ from pathlib import Path
 import subprocess
 from typing import Callable, TextIO
 
+from workstation_core.pricing import PriceQuote, format_price_per_hour
+
 
 @dataclass(frozen=True, slots=True)
 class EnvironmentTarget:
@@ -32,6 +34,8 @@ class EnvironmentTarget:
     ssh_alias: str
     default_access_mode: str
     instance_logical_id: str = ""
+    instance_type: str = ""
+    spot_price_limit: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +140,8 @@ def discover_environments(aws_root: Path, out: TextIO) -> list[EnvironmentTarget
             instance_logical_id = str(
                 getattr(environment_spec, "instance_logical_id", "") or ""
             ).strip()
+            instance_type = str(getattr(environment_spec, "instance_type", "") or "").strip()
+            spot_price_limit = str(getattr(environment_spec, "spot_price", "") or "").strip()
         except Exception as err:
             out.write(f"Warning: skipping '{child.name}' (malformed environment spec: {err})\n")
             continue
@@ -163,6 +169,8 @@ def discover_environments(aws_root: Path, out: TextIO) -> list[EnvironmentTarget
                 ssh_alias=ssh_alias,
                 default_access_mode=default_access_mode,
                 instance_logical_id=instance_logical_id,
+                instance_type=instance_type,
+                spot_price_limit=spot_price_limit,
             )
         )
 
@@ -477,8 +485,12 @@ def _build_deploy_env_overrides(
     *,
     input_func: Callable[[str], str],
     out: TextIO,
-) -> dict[str, str]:
-    """Prompt for deploy options and return environment overrides."""
+    price_provider: Callable[[EnvironmentTarget, str], PriceQuote] | None = None,
+) -> dict[str, str] | None:
+    """Prompt for deploy options, show a summary, and return env overrides.
+
+    Returns ``None`` when the user declines the final ``yes`` confirmation.
+    """
     access_mode = _prompt_access_mode(
         default_access_mode=environment.default_access_mode,
         input_func=input_func,
@@ -500,11 +512,62 @@ def _build_deploy_env_overrides(
         )
         outbound_choice = True
     purchase_mode = _prompt_purchase_mode(input_func=input_func, out=out)
+
+    price_quote: PriceQuote | None = None
+    if price_provider is not None:
+        try:
+            price_quote = price_provider(environment, purchase_mode)
+        except Exception as err:  # noqa: BLE001
+            out.write(f"Warning: failed to fetch pricing info ({err}).\n")
+    _render_deploy_summary(
+        environment,
+        access_mode=access_mode,
+        outbound_choice=outbound_choice,
+        purchase_mode=purchase_mode,
+        price_quote=price_quote,
+        out=out,
+    )
+    if not _confirm_exact_yes(
+        prompt="Type 'yes' to deploy: ",
+        cancellation_message="Deploy canceled.",
+        input_func=input_func,
+        out=out,
+    ):
+        return None
     return {
         "ACCESS_MODE": access_mode,
         "OUTBOUND_INTERNET": "1" if outbound_choice else "0",
         "PURCHASE_MODE": purchase_mode,
     }
+
+
+def _render_deploy_summary(
+    environment: EnvironmentTarget,
+    *,
+    access_mode: str,
+    outbound_choice: bool,
+    purchase_mode: str,
+    price_quote: PriceQuote | None,
+    out: TextIO,
+) -> None:
+    """Render the deploy summary block shown before the yes confirmation."""
+    out.write("\nDeploy summary:\n")
+    out.write(f"  Environment: {environment.display_name} [{environment.environment_key}]\n")
+    if environment.instance_type:
+        out.write(f"  Instance type: {environment.instance_type}\n")
+    out.write(f"  Access mode: {access_mode}\n")
+    out.write(f"  Outbound internet: {'yes' if outbound_choice else 'no'}\n")
+    out.write(f"  Purchase mode: {purchase_mode}\n")
+    if purchase_mode == "spot":
+        limit = environment.spot_price_limit or (
+            price_quote.spot_price_limit if price_quote is not None else None
+        )
+        out.write(f"  Spot price limit: {format_price_per_hour(limit)}\n")
+        current = price_quote.current_price_per_hour if price_quote is not None else None
+        out.write(f"  Current spot price: {format_price_per_hour(current)}\n")
+    elif purchase_mode == "on_demand":
+        current = price_quote.current_price_per_hour if price_quote is not None else None
+        out.write(f"  Current on-demand price: {format_price_per_hour(current)}\n")
 
 
 def _confirm_exact_yes(
@@ -539,6 +602,7 @@ def dispatch_action(
     input_func: Callable[[str], str],
     out: TextIO,
     runner: Callable[[list[str], Path, dict[str, str] | None], None],
+    price_provider: Callable[[EnvironmentTarget, str], PriceQuote] | None = None,
 ) -> ActionResult:
     """Dispatch one interactive action.
 
@@ -548,6 +612,8 @@ def dispatch_action(
         input_func: User input callback.
         out: Stream for user-facing messages.
         runner: Command runner callback.
+        price_provider: Optional callback that returns a ``PriceQuote`` for the
+            deploy summary. When omitted, prices are rendered as ``—``.
 
     Returns:
         Action result with loop-control flags.
@@ -583,15 +649,15 @@ def dispatch_action(
     ]
 
     if action == "deploy_default":
-        runner(
-            deploy_command,
-            environment.stack_dir,
-            _build_deploy_env_overrides(
-                environment,
-                input_func=input_func,
-                out=out,
-            ),
+        env_overrides = _build_deploy_env_overrides(
+            environment,
+            input_func=input_func,
+            out=out,
+            price_provider=price_provider,
         )
+        if env_overrides is None:
+            return ActionResult()
+        runner(deploy_command, environment.stack_dir, env_overrides)
         return ActionResult()
 
     if action == "deploy_pick_ami":
@@ -599,13 +665,12 @@ def dispatch_action(
             environment,
             input_func=input_func,
             out=out,
+            price_provider=price_provider,
         )
+        if env_overrides is None:
+            return ActionResult()
         env_overrides.update({"AMI_LIST": "1", "AMI_PICK": "1"})
-        runner(
-            deploy_command,
-            environment.stack_dir,
-            env_overrides,
-        )
+        runner(deploy_command, environment.stack_dir, env_overrides)
         return ActionResult()
 
     if action == "save_ami_only":

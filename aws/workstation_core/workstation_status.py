@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from workstation_core.ami_lifecycle import resolve_running_instance_id
+from workstation_core.pricing import PriceQuote
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,6 +19,8 @@ class WorkstationStatus:
         instance_id: Running instance id when resolvable.
         public_ip: Running instance public IP when resolvable.
         ssh_alias: SSH host alias when running instance details are available.
+        purchase_mode: Detected purchase mode for the running instance.
+        price_quote: Price snapshot for the running instance, when resolvable.
     """
 
     stack_state: str
@@ -25,6 +28,8 @@ class WorkstationStatus:
     instance_id: str | None = None
     public_ip: str | None = None
     ssh_alias: str | None = None
+    purchase_mode: str | None = None
+    price_quote: PriceQuote | None = None
 
 
 def _is_stack_not_found_error(error: Exception) -> bool:
@@ -56,6 +61,40 @@ def _resolve_public_ip(ec2_client: Any, instance_id: str) -> str | None:
     return None
 
 
+def _resolve_instance_az(ec2_client: Any, instance_id: str) -> str | None:
+    """Resolve the availability zone for one instance id."""
+    try:
+        described = ec2_client.describe_instances(InstanceIds=[instance_id])
+    except Exception:  # noqa: BLE001
+        return None
+    for reservation in described.get("Reservations", []):
+        for instance in reservation.get("Instances", []):
+            if str(instance.get("InstanceId", "")).strip() != instance_id:
+                continue
+            az = str(instance.get("Placement", {}).get("AvailabilityZone", "")).strip()
+            return az or None
+    return None
+
+
+def _detect_purchase_mode(
+    cloudformation_client: Any,
+    *,
+    stack_name: str,
+    instance_logical_id: str | None,
+) -> str:
+    """Return ``on_demand`` when a CfnInstance resource exists, else ``spot``."""
+    if not instance_logical_id:
+        return "spot"
+    try:
+        cloudformation_client.describe_stack_resource(
+            StackName=stack_name,
+            LogicalResourceId=instance_logical_id,
+        )
+    except Exception:  # noqa: BLE001
+        return "spot"
+    return "on_demand"
+
+
 def get_workstation_status(
     cloudformation_client: Any,
     ec2_client: Any,
@@ -64,6 +103,7 @@ def get_workstation_status(
     spot_fleet_logical_id: str,
     ssh_alias: str,
     instance_logical_id: str | None = None,
+    price_provider: Callable[[str, str | None], PriceQuote] | None = None,
 ) -> WorkstationStatus:
     """Resolve typed stack/instance status for one workstation environment.
 
@@ -114,10 +154,30 @@ def get_workstation_status(
     except Exception as err:
         raise RuntimeError(f"Failed to resolve instance metadata for '{instance_id}'.") from err
 
+    purchase_mode = _detect_purchase_mode(
+        cloudformation_client,
+        stack_name=stack_name,
+        instance_logical_id=instance_logical_id,
+    )
+
+    price_quote: PriceQuote | None = None
+    if price_provider is not None:
+        availability_zone = (
+            _resolve_instance_az(ec2_client, instance_id=instance_id)
+            if purchase_mode == "spot"
+            else None
+        )
+        try:
+            price_quote = price_provider(purchase_mode, availability_zone)
+        except Exception:  # noqa: BLE001
+            price_quote = None
+
     return WorkstationStatus(
         stack_state="running",
         stack_status=normalized_stack_status,
         instance_id=instance_id,
         public_ip=public_ip,
         ssh_alias=ssh_alias,
+        purchase_mode=purchase_mode,
+        price_quote=price_quote,
     )

@@ -153,14 +153,15 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
         self.assertIn("Unrecognized environment 'nope'", output.getvalue())
 
     def test_dispatch_action_runs_default_deploy_command(self) -> None:
-        """Expected: deploy-default dispatches deploy script without AMI env overrides."""
+        """Expected: deploy-default dispatches deploy script after yes confirmation."""
         calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
         environment = self._targets()[0]
+        inputs = iter(["", "", "", "yes"])
 
         result = dispatch_action(
             "deploy_default",
             environment,
-            input_func=lambda _: "",
+            input_func=lambda _: next(inputs),
             out=io.StringIO(),
             runner=lambda command, cwd, env_overrides: calls.append((command, cwd, env_overrides)),
         )
@@ -178,7 +179,7 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
         """Expected: empty access-mode input falls back to the environment spec default."""
         calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
         environment = self._targets()[1]
-        inputs = iter(["", "", ""])
+        inputs = iter(["", "", "", "yes"])
 
         dispatch_action(
             "deploy_default",
@@ -198,7 +199,7 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
         """Expected: AMI-pick deploy keeps AMI flags while applying prompted deploy settings."""
         calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
         environment = self._targets()[1]
-        inputs = iter(["", "y", ""])
+        inputs = iter(["", "y", "", "yes"])
 
         dispatch_action(
             "deploy_pick_ami",
@@ -224,7 +225,7 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
         """Expected: typed on_demand at the purchase prompt is exported as PURCHASE_MODE."""
         calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
         environment = self._targets()[0]
-        inputs = iter(["", "", "on_demand"])
+        inputs = iter(["", "", "on_demand", "yes"])
 
         dispatch_action(
             "deploy_default",
@@ -237,12 +238,61 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
         self.assertEqual(1, len(calls))
         self.assertEqual("on_demand", calls[0][2]["PURCHASE_MODE"])
 
+    def test_dispatch_action_deploy_cancels_when_yes_confirmation_missing(self) -> None:
+        """Failure: deploy does not dispatch when the final confirmation is not exact yes."""
+        calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
+        out = io.StringIO()
+        environment = self._targets()[0]
+        inputs = iter(["", "", "", "no"])
+
+        result = dispatch_action(
+            "deploy_default",
+            environment,
+            input_func=lambda _: next(inputs),
+            out=out,
+            runner=lambda command, cwd, env_overrides: calls.append((command, cwd, env_overrides)),
+        )
+
+        self.assertEqual([], calls)
+        self.assertFalse(result.should_quit)
+        self.assertIn("Deploy canceled.", out.getvalue())
+
+    def test_dispatch_action_deploy_default_renders_price_summary_from_provider(self) -> None:
+        """Expected: deploy summary includes prices returned by the price provider."""
+        from workstation_core.pricing import PriceQuote
+
+        out = io.StringIO()
+        environment = self._targets()[0]
+        inputs = iter(["", "", "spot", "yes"])
+
+        def provider(env: EnvironmentTarget, mode: str) -> PriceQuote:
+            return PriceQuote(
+                purchase_mode=mode,
+                current_price_per_hour="0.0234",
+                spot_price_limit="0.10",
+            )
+
+        dispatch_action(
+            "deploy_default",
+            environment,
+            input_func=lambda _: next(inputs),
+            out=out,
+            runner=lambda command, cwd, env_overrides: None,
+            price_provider=provider,
+        )
+
+        rendered = out.getvalue()
+        self.assertIn("Deploy summary:", rendered)
+        self.assertIn("Purchase mode: spot", rendered)
+        self.assertIn("Current spot price: $0.0234/hr", rendered)
+        self.assertIn("Spot price limit: $0.1000/hr", rendered)
+
     def test_dispatch_action_deploy_forces_public_ip_for_ssh_mode(self) -> None:
         """Edge: SSH-capable access modes force public IP even when the user answers no."""
         calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
         output = io.StringIO()
         environment = self._targets()[0]
-        inputs = iter(["ssh", "n", ""])
+        inputs = iter(["ssh", "n", "", "yes"])
 
         dispatch_action(
             "deploy_default",

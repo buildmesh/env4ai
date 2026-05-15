@@ -31,6 +31,11 @@ from workstation_core.interactive_workstation import (
     run_script,
     save_last_used_environment_key,
 )
+from workstation_core.pricing import (
+    PriceQuote,
+    format_price_per_hour,
+    lookup_deploy_price_quote,
+)
 from workstation_core.workstation_status import WorkstationStatus, get_workstation_status
 
 
@@ -71,6 +76,15 @@ def _resolve_region(cli_region: str | None) -> str | None:
     return None
 
 
+def _make_pricing_client(*, profile: str | None) -> object | None:
+    """Return a pricing client bound to a Pricing API region, or None on failure."""
+    try:
+        pricing_session = boto3.Session(profile_name=profile, region_name="us-east-1")
+        return pricing_session.client("pricing")
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _resolve_profile(cli_profile: str | None) -> str | None:
     """Resolve profile precedence from CLI then AWS env vars."""
     if cli_profile and cli_profile.strip():
@@ -94,6 +108,21 @@ def _render_status(environment: EnvironmentTarget, status: WorkstationStatus) ->
             print(f"  Public IP: {status.public_ip}")
         if status.ssh_alias:
             print(f"  SSH alias: {status.ssh_alias}")
+        if status.purchase_mode:
+            print(f"  Purchase mode: {status.purchase_mode}")
+        if status.price_quote is not None:
+            quote = status.price_quote
+            if quote.purchase_mode == "spot":
+                print(
+                    f"  Spot price limit: {format_price_per_hour(quote.spot_price_limit)}"
+                )
+                print(
+                    f"  Current spot price: {format_price_per_hour(quote.current_price_per_hour)}"
+                )
+            elif quote.purchase_mode == "on_demand":
+                print(
+                    f"  Current on-demand price: {format_price_per_hour(quote.current_price_per_hour)}"
+                )
 
 
 def _show_gated_action_menu(availability: dict[str, ActionAvailability]) -> None:
@@ -131,13 +160,70 @@ def _build_environment_state(status: WorkstationStatus) -> InteractiveEnvironmen
     )
 
 
+def _make_deploy_price_provider(
+    *,
+    ec2_client: object,
+    pricing_client: object | None,
+    region: str,
+):
+    """Return a price provider callable bound to the active AWS session."""
+
+    def _provider(environment: EnvironmentTarget, purchase_mode: str) -> PriceQuote:
+        return lookup_deploy_price_quote(
+            purchase_mode=purchase_mode,
+            instance_type=environment.instance_type,
+            spot_price_limit=environment.spot_price_limit or None,
+            region=region,
+            ec2_client=ec2_client,
+            pricing_client=pricing_client,
+        )
+
+    return _provider
+
+
+def _make_status_price_provider(
+    *,
+    environment: EnvironmentTarget,
+    ec2_client: object,
+    pricing_client: object | None,
+    region: str,
+):
+    """Return a status-time price provider bound to the active AWS session."""
+
+    def _provider(purchase_mode: str, availability_zone: str | None) -> PriceQuote:
+        return lookup_deploy_price_quote(
+            purchase_mode=purchase_mode,
+            instance_type=environment.instance_type,
+            spot_price_limit=environment.spot_price_limit or None,
+            region=region,
+            ec2_client=ec2_client,
+            pricing_client=pricing_client,
+            availability_zone=availability_zone,
+        )
+
+    return _provider
+
+
 def _run_action_loop(
     *,
     environment: EnvironmentTarget,
     cloudformation_client: object,
     ec2_client: object,
+    pricing_client: object | None,
+    region: str,
 ) -> ActionResult:
     """Run actions loop for one selected environment."""
+    deploy_price_provider = _make_deploy_price_provider(
+        ec2_client=ec2_client,
+        pricing_client=pricing_client,
+        region=region,
+    )
+    status_price_provider = _make_status_price_provider(
+        environment=environment,
+        ec2_client=ec2_client,
+        pricing_client=pricing_client,
+        region=region,
+    )
     while True:
         status = get_workstation_status(
             cloudformation_client,
@@ -146,6 +232,7 @@ def _run_action_loop(
             spot_fleet_logical_id=environment.spot_fleet_logical_id,
             ssh_alias=environment.ssh_alias,
             instance_logical_id=environment.instance_logical_id or None,
+            price_provider=status_price_provider,
         )
         _render_status(environment, status)
         current_state = _build_environment_state(status)
@@ -165,6 +252,7 @@ def _run_action_loop(
             stack_name=environment.stack_name,
             spot_fleet_logical_id=environment.spot_fleet_logical_id,
             ssh_alias=environment.ssh_alias,
+            instance_logical_id=environment.instance_logical_id or None,
         )
         rechecked_state = _build_environment_state(rechecked_status)
         rechecked_availability = build_action_availability(rechecked_state)
@@ -185,6 +273,7 @@ def _run_action_loop(
                     cwd=cwd,
                     env_overrides=env_overrides,
                 ),
+                price_provider=deploy_price_provider,
             )
         except RuntimeError as err:
             print(str(err))
@@ -209,6 +298,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     cloudformation_client = session.client("cloudformation")
     ec2_client = session.client("ec2")
+    pricing_client = _make_pricing_client(profile=profile)
     environments = discover_environments(aws_root, out=sys.stdout)
     last_used_environment_key = load_last_used_environment_key(state_file)
 
@@ -229,6 +319,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             environment=selected,
             cloudformation_client=cloudformation_client,
             ec2_client=ec2_client,
+            pricing_client=pricing_client,
+            region=session.region_name,
         )
         if result.should_quit:
             print("Bye.")
