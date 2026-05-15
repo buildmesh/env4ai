@@ -63,6 +63,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Optional workstation access mode override.",
     )
+    parser.add_argument(
+        "--purchase-mode",
+        choices=("spot", "on_demand"),
+        default=None,
+        help="EC2 purchase mode (default: spot). Falls back to PURCHASE_MODE env var.",
+    )
     return parser.parse_args(argv)
 
 
@@ -77,6 +83,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             profile=args.profile,
             region=args.region,
             access_mode=args.access_mode,
+            purchase_mode=args.purchase_mode,
         )
     )
 

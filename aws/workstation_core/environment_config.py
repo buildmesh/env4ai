@@ -61,6 +61,11 @@ class EnvironmentSpec:
         return f"{self.display_name}SpotFleet"
 
     @property
+    def instance_logical_id(self) -> str:
+        """Return the on-demand CfnInstance logical id for this environment."""
+        return f"{self.display_name}Instance"
+
+    @property
     def ami_prefix(self) -> str:
         """Return the AMI name prefix for saved environment images."""
         return f"{self.environment_key}_"

@@ -63,6 +63,7 @@ def get_workstation_status(
     stack_name: str,
     spot_fleet_logical_id: str,
     ssh_alias: str,
+    instance_logical_id: str | None = None,
 ) -> WorkstationStatus:
     """Resolve typed stack/instance status for one workstation environment.
 
@@ -72,6 +73,8 @@ def get_workstation_status(
         stack_name: CloudFormation stack name.
         spot_fleet_logical_id: Spot Fleet logical resource id.
         ssh_alias: SSH alias from the environment spec.
+        instance_logical_id: Optional on-demand instance logical id. When provided,
+            on-demand resources are detected before falling back to Spot Fleet.
 
     Returns:
         Typed workstation status for interactive UX.
@@ -99,6 +102,7 @@ def get_workstation_status(
             ec2_client,
             stack_name=stack_name,
             spot_fleet_logical_id=spot_fleet_logical_id,
+            instance_logical_id=instance_logical_id,
         )
     except RuntimeError as err:
         if _is_runtime_instance_absence(err):

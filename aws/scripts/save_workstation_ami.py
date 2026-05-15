@@ -108,6 +108,17 @@ def _resolve_spot_fleet_logical_id(args: argparse.Namespace) -> str:
     return f"{Path(args.stack_dir).name.capitalize()}SpotFleet"
 
 
+def _resolve_instance_logical_id(stack_dir: str) -> str | None:
+    """Resolve on-demand CfnInstance logical id from environment spec when available."""
+    environment_spec = load_environment_spec(stack_dir=stack_dir)
+    if environment_spec is None:
+        return None
+    instance_logical_id = str(
+        getattr(environment_spec, "instance_logical_id", "") or ""
+    ).strip()
+    return instance_logical_id or None
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run save-only AMI workflow."""
     args = parse_args(argv)
@@ -126,6 +137,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     image_name = build_stop_image_name(environment_key, args.ami_tag)
     spot_fleet_logical_id = _resolve_spot_fleet_logical_id(args)
+    instance_logical_id = _resolve_instance_logical_id(args.stack_dir)
 
     ec2_client = session.client("ec2")
     cloudformation_client = session.client("cloudformation")
@@ -134,6 +146,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ec2_client,
         stack_name=args.stack_name,
         spot_fleet_logical_id=spot_fleet_logical_id,
+        instance_logical_id=instance_logical_id,
     )
     image_id = create_image_from_instance(
         ec2_client,

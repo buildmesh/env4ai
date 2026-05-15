@@ -58,6 +58,7 @@ class DeployWorkflowInputs:
     profile: str | None = None
     region: str | None = None
     access_mode: str | None = None
+    purchase_mode: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -275,6 +276,7 @@ def deploy_stack(
     eip_allocation_id: str | None = None,
     access_mode: str | None = None,
     public_ip_enabled: bool | None = None,
+    purchase_mode: str | None = None,
 ) -> None:
     """Deploy CDK stack with optional AMI, bootstrap, and EIP context."""
     command: list[str] = ["uv", "run", "cdk", "deploy", "--require-approval", "never", stack_name]
@@ -288,6 +290,8 @@ def deploy_stack(
         command.extend(["-c", f"access_mode={access_mode}"])
     if public_ip_enabled is not None:
         command.extend(["-c", f"public_ip_enabled={'true' if public_ip_enabled else 'false'}"])
+    if purchase_mode:
+        command.extend(["-c", f"purchase_mode={purchase_mode}"])
     run_command(
         command,
         cwd=stack_dir,
@@ -318,6 +322,7 @@ def run_post_deploy_check(
     eip_allocation_id: str | None = None,
     eip_public_ip: str | None = None,
     access_mode: str | None = None,
+    instance_logical_id: str | None = None,
 ) -> None:
     """Run instance helper after a successful deploy.
 
@@ -326,6 +331,7 @@ def run_post_deploy_check(
         stack_name: CloudFormation stack name for instance lookup.
         eip_allocation_id: Optional EIP allocation ID to associate with the instance.
         eip_public_ip: Optional EIP public IP to show in SSH config output.
+        instance_logical_id: Optional on-demand instance logical id for direct lookup.
     """
     command = ["uv", "run", "../scripts/check_instance.py", "--stack-name", stack_name]
     if eip_allocation_id:
@@ -334,6 +340,8 @@ def run_post_deploy_check(
         command.extend(["--eip-public-ip", eip_public_ip])
     if access_mode:
         command.extend(["--access-mode", access_mode])
+    if instance_logical_id:
+        command.extend(["--instance-logical-id", instance_logical_id])
     run_command(
         command,
         cwd=stack_dir,
@@ -374,6 +382,24 @@ def resolve_access_mode(
 
     if resolved not in {"ssh", "ssm", "both"}:
         raise RuntimeError("ACCESS_MODE must be one of: ssh, ssm, both.")
+    return resolved
+
+
+def resolve_purchase_mode(
+    *,
+    cli_purchase_mode: str | None,
+    env: Mapping[str, str],
+) -> str:
+    """Resolve EC2 purchase mode (spot or on_demand) from CLI then env."""
+    if cli_purchase_mode and cli_purchase_mode.strip():
+        resolved = cli_purchase_mode.strip()
+    elif env.get("PURCHASE_MODE", "").strip():
+        resolved = env["PURCHASE_MODE"].strip()
+    else:
+        resolved = "spot"
+
+    if resolved not in {"spot", "on_demand"}:
+        raise RuntimeError("PURCHASE_MODE must be one of: spot, on_demand.")
     return resolved
 
 
@@ -534,6 +560,10 @@ def run_deploy_lifecycle(
         env=environment,
         environment_spec=environment_spec,
     )
+    purchase_mode = resolve_purchase_mode(
+        cli_purchase_mode=inputs.purchase_mode,
+        env=environment,
+    )
     public_ip_enabled = resolve_public_ip_enabled(env=environment, access_mode=access_mode)
     needs_elastic_ip = requires_elastic_ip(access_mode)
 
@@ -561,13 +591,21 @@ def run_deploy_lifecycle(
         eip_allocation_id=eip_info["allocation_id"] if eip_info is not None else None,
         access_mode=access_mode,
         public_ip_enabled=public_ip_enabled,
+        purchase_mode=purchase_mode,
     )
     time.sleep(5)
+    instance_logical_id_value: str | None = None
+    if purchase_mode == "on_demand" and environment_spec is not None:
+        candidate = str(
+            getattr(environment_spec, "instance_logical_id", "") or ""
+        ).strip()
+        instance_logical_id_value = candidate or None
     run_post_deploy_check(
         stack_dir=inputs.stack_dir,
         stack_name=inputs.stack_name,
         eip_allocation_id=eip_info["allocation_id"] if eip_info is not None else None,
         eip_public_ip=eip_info["public_ip"] if eip_info is not None else None,
         access_mode=access_mode,
+        instance_logical_id=instance_logical_id_value,
     )
     return 0

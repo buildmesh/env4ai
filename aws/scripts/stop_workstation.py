@@ -115,6 +115,17 @@ def _resolve_spot_fleet_logical_id(args: argparse.Namespace) -> str:
     return f"{Path(args.stack_dir).name.capitalize()}SpotFleet"
 
 
+def _resolve_instance_logical_id(stack_dir: str) -> str | None:
+    """Resolve on-demand CfnInstance logical id from environment spec when available."""
+    environment_spec = load_environment_spec(stack_dir=stack_dir)
+    if environment_spec is None:
+        return None
+    instance_logical_id = str(
+        getattr(environment_spec, "instance_logical_id", "") or ""
+    ).strip()
+    return instance_logical_id or None
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run stop workflow with optional save-on-stop AMI path."""
     args = parse_args(argv)
@@ -135,6 +146,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         fallback_environment=args.environment,
     )
     spot_fleet_logical_id = _resolve_spot_fleet_logical_id(args)
+    instance_logical_id = _resolve_instance_logical_id(args.stack_dir)
     stop_inputs = StopOrchestrationInputs(
         environment_key=environment_key,
         stack_name=args.stack_name,
@@ -160,6 +172,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             ec2_client,
             stack_name=args.stack_name,
             spot_fleet_logical_id=spot_fleet_logical_id,
+            instance_logical_id=instance_logical_id,
         ),
         create_image=lambda instance_id, image_name: create_image_from_instance(
             ec2_client,

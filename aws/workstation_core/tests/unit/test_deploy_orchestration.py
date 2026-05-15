@@ -6,7 +6,11 @@ import io
 import unittest
 from unittest.mock import Mock, patch
 
-from workstation_core.orchestration import DeployWorkflowInputs, run_deploy_lifecycle
+from workstation_core.orchestration import (
+    DeployWorkflowInputs,
+    resolve_purchase_mode,
+    run_deploy_lifecycle,
+)
 
 
 class DeployOrchestrationTests(unittest.TestCase):
@@ -51,6 +55,7 @@ class DeployOrchestrationTests(unittest.TestCase):
             eip_allocation_id="eipalloc-abc123",
             access_mode="ssh",
             public_ip_enabled=True,
+            purchase_mode="spot",
         )
         post_check.assert_called_once_with(
             stack_dir="/tmp/gastown",
@@ -58,6 +63,7 @@ class DeployOrchestrationTests(unittest.TestCase):
             eip_allocation_id="eipalloc-abc123",
             eip_public_ip="1.2.3.4",
             access_mode="ssh",
+            instance_logical_id=None,
         )
 
     def test_run_deploy_lifecycle_deploys_shared_network_when_missing(self) -> None:
@@ -159,6 +165,7 @@ class DeployOrchestrationTests(unittest.TestCase):
             eip_allocation_id=None,
             access_mode="ssm",
             public_ip_enabled=False,
+            purchase_mode="spot",
         )
         post_check.assert_called_once_with(
             stack_dir="/tmp/gastown",
@@ -166,6 +173,7 @@ class DeployOrchestrationTests(unittest.TestCase):
             eip_allocation_id=None,
             eip_public_ip=None,
             access_mode="ssm",
+            instance_logical_id=None,
         )
 
     def test_run_deploy_lifecycle_keeps_eip_allocation_for_both_mode(self) -> None:
@@ -214,6 +222,7 @@ class DeployOrchestrationTests(unittest.TestCase):
             eip_allocation_id=None,
             eip_public_ip=None,
             access_mode="ssm",
+            instance_logical_id=None,
         )
 
     def test_run_deploy_lifecycle_exits_early_for_list_only_mode(self) -> None:
@@ -255,6 +264,67 @@ class DeployOrchestrationTests(unittest.TestCase):
         find_or_create_eip.assert_not_called()
         deploy_shared_network_stack.assert_not_called()
         deploy_stack.assert_not_called()
+
+    def test_resolve_purchase_mode_defaults_to_spot(self) -> None:
+        """Expected: empty CLI/env defaults purchase_mode to spot."""
+        self.assertEqual(
+            "spot",
+            resolve_purchase_mode(cli_purchase_mode=None, env={}),
+        )
+
+    def test_resolve_purchase_mode_prefers_cli_over_env(self) -> None:
+        """Expected: explicit CLI value wins over PURCHASE_MODE env var."""
+        self.assertEqual(
+            "on_demand",
+            resolve_purchase_mode(
+                cli_purchase_mode="on_demand",
+                env={"PURCHASE_MODE": "spot"},
+            ),
+        )
+
+    def test_resolve_purchase_mode_falls_back_to_env_when_cli_missing(self) -> None:
+        """Edge: PURCHASE_MODE env var is honored when CLI is unset."""
+        self.assertEqual(
+            "on_demand",
+            resolve_purchase_mode(
+                cli_purchase_mode=None,
+                env={"PURCHASE_MODE": "on_demand"},
+            ),
+        )
+
+    def test_resolve_purchase_mode_rejects_unknown_value(self) -> None:
+        """Failure: invalid purchase modes raise with actionable guidance."""
+        with self.assertRaisesRegex(RuntimeError, "PURCHASE_MODE must be one of"):
+            resolve_purchase_mode(cli_purchase_mode="reserved", env={})
+
+    def test_run_deploy_lifecycle_passes_on_demand_purchase_mode_to_deploy(self) -> None:
+        """Expected: on_demand env value is plumbed through to deploy_stack and post-deploy check."""
+        env = {"AWS_REGION": "us-west-2", "ACCESS_MODE": "ssm", "PURCHASE_MODE": "on_demand"}
+        selection = Mock(should_deploy=True, selected_ami_id=None)
+        environment_spec = Mock(
+            environment_key="gastown",
+            default_access_mode="ssh",
+            instance_logical_id="GastownInstance",
+        )
+
+        with (
+            patch("workstation_core.orchestration.load_environment_spec", return_value=environment_spec),
+            patch("workstation_core.orchestration.make_ec2_client", return_value=Mock()),
+            patch("workstation_core.orchestration.resolve_ami_selection", return_value=selection),
+            patch("workstation_core.orchestration.shared_network_stack_exists", return_value=True),
+            patch("workstation_core.orchestration.find_or_create_eip") as find_or_create_eip,
+            patch("workstation_core.orchestration.deploy_stack") as deploy_stack,
+            patch("workstation_core.orchestration.run_post_deploy_check") as post_check,
+        ):
+            result = run_deploy_lifecycle(inputs=self._inputs(), env=env, out=io.StringIO())
+
+        self.assertEqual(0, result)
+        find_or_create_eip.assert_not_called()
+        self.assertEqual("on_demand", deploy_stack.call_args.kwargs["purchase_mode"])
+        self.assertEqual(
+            "GastownInstance",
+            post_check.call_args.kwargs["instance_logical_id"],
+        )
 
     def test_run_deploy_lifecycle_aborts_environment_deploy_when_shared_network_deploy_fails(self) -> None:
         """Failure: shared network deploy errors stop the environment deploy flow."""

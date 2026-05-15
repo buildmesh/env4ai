@@ -480,6 +480,56 @@ class WorkstationStackTests(unittest.TestCase):
 
         self.assertIn("UserData", launch_spec)
 
+    def test_on_demand_purchase_mode_creates_cfn_instance_and_skips_spot_fleet(self) -> None:
+        """Expected: on_demand purchase mode synthesizes a CfnInstance with no Spot Fleet."""
+        app = core.App()
+        stack = self._make_stack(
+            app,
+            "aws-workstation-on-demand",
+            purchase_mode="on_demand",
+            access_mode="both",
+        )
+        template = assertions.Template.from_stack(stack)
+        template_json = template.to_json()
+
+        resource_types = {
+            resource["Type"] for resource in template_json["Resources"].values()
+        }
+        self.assertIn("AWS::EC2::Instance", resource_types)
+        self.assertNotIn("AWS::EC2::SpotFleet", resource_types)
+
+        instance = template_json["Resources"]["TestInstance"]["Properties"]
+        self.assertIn("KeyName", instance)
+        self.assertIn("IamInstanceProfile", instance)
+        self.assertIn("UserData", instance)
+        self.assertEqual(2, len(instance["SecurityGroupIds"]))
+        self.assertEqual(
+            [
+                {
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "DeleteOnTermination": True,
+                        "VolumeSize": TEST_SPEC.volume_size,
+                        "VolumeType": "gp3",
+                        "Encrypted": False,
+                    },
+                }
+            ],
+            instance["BlockDeviceMappings"],
+        )
+
+    def test_purchase_mode_rejects_unknown_value(self) -> None:
+        """Failure: invalid purchase_mode raises before stack resources are emitted."""
+        app = core.App()
+        with self.assertRaisesRegex(
+            ValueError, "purchase_mode must be one of: spot, on_demand"
+        ):
+            self._make_stack(
+                app,
+                "aws-workstation-invalid-purchase-mode",
+                purchase_mode="reserved",
+            )
+
     def test_stack_uses_shared_network_resources_instead_of_creating_vpc_and_igw(self) -> None:
         """Expected: environment stacks only create tenant resources inside the shared VPC."""
         app = core.App()

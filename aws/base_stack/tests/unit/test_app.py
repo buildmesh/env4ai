@@ -109,8 +109,10 @@ class AppResolverTests(unittest.TestCase):
             verbose_bootstrap_resolution=False,
             eip_allocation_id=None,
             access_mode="ssh",
+            public_ip_enabled=True,
             shared_ssm_clients_security_group_id="sg-ssm",
             shared_ssm_instance_profile_arn="arn:aws:iam::111111111111:instance-profile/ssm",
+            purchase_mode="spot",
             environment_spec=ENVIRONMENT_SPEC,
             env=environment_obj,
         )
@@ -155,8 +157,10 @@ class AppResolverTests(unittest.TestCase):
             verbose_bootstrap_resolution=False,
             eip_allocation_id=None,
             access_mode="ssh",
+            public_ip_enabled=True,
             shared_ssm_clients_security_group_id="sg-ssm",
             shared_ssm_instance_profile_arn="arn:aws:iam::111111111111:instance-profile/ssm",
+            purchase_mode="spot",
             environment_spec=ENVIRONMENT_SPEC,
             env=environment_obj,
         )
@@ -201,12 +205,64 @@ class AppResolverTests(unittest.TestCase):
             verbose_bootstrap_resolution=True,
             eip_allocation_id=None,
             access_mode="ssh",
+            public_ip_enabled=True,
             shared_ssm_clients_security_group_id="sg-ssm",
             shared_ssm_instance_profile_arn="arn:aws:iam::111111111111:instance-profile/ssm",
+            purchase_mode="spot",
             environment_spec=ENVIRONMENT_SPEC,
             env=environment_obj,
         )
         app_instance.synth.assert_called_once()
+
+    def test_main_passes_purchase_mode_from_context(self) -> None:
+        """Expected: explicit purchase_mode context is passed to the workstation stack."""
+        app_instance = Mock()
+        app_instance.node.try_get_context.side_effect = (
+            lambda key: "on_demand" if key == "purchase_mode" else None
+        )
+        environment_obj = Mock()
+
+        with (
+            patch("app.cdk.App", return_value=app_instance),
+            patch("app.cdk.Environment", return_value=environment_obj),
+            patch("app.get_account", return_value="111111111111"),
+            patch("app.get_region", return_value="us-west-2"),
+            patch("app.get_shared_network_config", return_value=Mock(stack_name="Env4aiNetworkStack")),
+            patch("app.Env4aiNetworkStack"),
+            patch(
+                "app.load_shared_network_imports",
+                return_value=self._shared_network_imports(),
+            ),
+            patch("app.WorkstationStack") as stack_mock,
+        ):
+            base_app.main()
+
+        self.assertEqual("on_demand", stack_mock.call_args.kwargs["purchase_mode"])
+
+    def test_main_rejects_invalid_purchase_mode_context(self) -> None:
+        """Failure: invalid purchase_mode context aborts synth with actionable error."""
+        app_instance = Mock()
+        app_instance.node.try_get_context.side_effect = (
+            lambda key: "preempt" if key == "purchase_mode" else None
+        )
+
+        with (
+            patch("app.cdk.App", return_value=app_instance),
+            patch("app.cdk.Environment", return_value=Mock()),
+            patch("app.get_account", return_value="111111111111"),
+            patch("app.get_region", return_value="us-west-2"),
+            patch("app.get_shared_network_config", return_value=Mock(stack_name="Env4aiNetworkStack")),
+            patch("app.Env4aiNetworkStack"),
+            patch(
+                "app.load_shared_network_imports",
+                return_value=self._shared_network_imports(),
+            ),
+            patch("app.WorkstationStack"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError, "purchase_mode context must be one of: spot, on_demand"
+            ):
+                base_app.main()
 
     def test_main_passes_access_mode_from_context(self) -> None:
         """Expected: explicit access-mode context is passed to the workstation stack."""

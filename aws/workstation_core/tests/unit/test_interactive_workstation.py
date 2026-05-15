@@ -169,7 +169,7 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
         self.assertFalse(result.should_quit)
         self.assertEqual(1, len(calls))
         self.assertEqual(
-            {"ACCESS_MODE": "ssh", "OUTBOUND_INTERNET": "1"},
+            {"ACCESS_MODE": "ssh", "OUTBOUND_INTERNET": "1", "PURCHASE_MODE": "spot"},
             calls[0][2],
         )
         self.assertIn("../scripts/deploy_workstation.py", calls[0][0])
@@ -178,7 +178,7 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
         """Expected: empty access-mode input falls back to the environment spec default."""
         calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
         environment = self._targets()[1]
-        inputs = iter(["", ""])
+        inputs = iter(["", "", ""])
 
         dispatch_action(
             "deploy_default",
@@ -190,7 +190,7 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
 
         self.assertEqual(1, len(calls))
         self.assertEqual(
-            {"ACCESS_MODE": "ssm", "OUTBOUND_INTERNET": "0"},
+            {"ACCESS_MODE": "ssm", "OUTBOUND_INTERNET": "0", "PURCHASE_MODE": "spot"},
             calls[0][2],
         )
 
@@ -198,7 +198,7 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
         """Expected: AMI-pick deploy keeps AMI flags while applying prompted deploy settings."""
         calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
         environment = self._targets()[1]
-        inputs = iter(["", "y"])
+        inputs = iter(["", "y", ""])
 
         dispatch_action(
             "deploy_pick_ami",
@@ -213,18 +213,36 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
             {
                 "ACCESS_MODE": "ssm",
                 "OUTBOUND_INTERNET": "1",
+                "PURCHASE_MODE": "spot",
                 "AMI_LIST": "1",
                 "AMI_PICK": "1",
             },
             calls[0][2],
         )
 
+    def test_dispatch_action_deploy_passes_on_demand_purchase_mode_when_selected(self) -> None:
+        """Expected: typed on_demand at the purchase prompt is exported as PURCHASE_MODE."""
+        calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
+        environment = self._targets()[0]
+        inputs = iter(["", "", "on_demand"])
+
+        dispatch_action(
+            "deploy_default",
+            environment,
+            input_func=lambda _: next(inputs),
+            out=io.StringIO(),
+            runner=lambda command, cwd, env_overrides: calls.append((command, cwd, env_overrides)),
+        )
+
+        self.assertEqual(1, len(calls))
+        self.assertEqual("on_demand", calls[0][2]["PURCHASE_MODE"])
+
     def test_dispatch_action_deploy_forces_public_ip_for_ssh_mode(self) -> None:
         """Edge: SSH-capable access modes force public IP even when the user answers no."""
         calls: list[tuple[list[str], Path, dict[str, str] | None]] = []
         output = io.StringIO()
         environment = self._targets()[0]
-        inputs = iter(["ssh", "n"])
+        inputs = iter(["ssh", "n", ""])
 
         dispatch_action(
             "deploy_default",
@@ -235,7 +253,7 @@ class InteractiveWorkstationHelpersTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            {"ACCESS_MODE": "ssh", "OUTBOUND_INTERNET": "1"},
+            {"ACCESS_MODE": "ssh", "OUTBOUND_INTERNET": "1", "PURCHASE_MODE": "spot"},
             calls[0][2],
         )
         self.assertIn("SSH-capable access modes require a public IP.", output.getvalue())

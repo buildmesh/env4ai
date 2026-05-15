@@ -13,6 +13,7 @@ from workstation_core.ami_lifecycle import (
     pick_image_interactively,
     print_image_list,
     resolve_ami_selection,
+    resolve_running_instance_id,
     run_ami_permission_preflight,
     validate_mode_arguments,
 )
@@ -227,6 +228,79 @@ class AmiLifecycleTests(unittest.TestCase):
             "Missing required EC2 image permission\\(s\\): ec2:DescribeImages",
         ):
             run_ami_permission_preflight(ec2_client, environment="gastown")
+
+    def test_resolve_running_instance_id_returns_on_demand_physical_id_when_present(self) -> None:
+        """Expected: on-demand instance logical id resolves directly to its physical id."""
+        cfn_client = Mock()
+        cfn_client.describe_stack_resource.return_value = {
+            "StackResourceDetail": {"PhysicalResourceId": "i-on-demand"}
+        }
+        ec2_client = Mock()
+        ec2_client.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {"InstanceId": "i-on-demand", "State": {"Name": "running"}}
+                    ]
+                }
+            ]
+        }
+
+        instance_id = resolve_running_instance_id(
+            cfn_client,
+            ec2_client,
+            stack_name="TestStack",
+            spot_fleet_logical_id="TestSpotFleet",
+            instance_logical_id="TestInstance",
+        )
+
+        self.assertEqual("i-on-demand", instance_id)
+        cfn_client.describe_stack_resource.assert_called_once_with(
+            StackName="TestStack", LogicalResourceId="TestInstance"
+        )
+        ec2_client.describe_spot_fleet_instances.assert_not_called()
+
+    def test_resolve_running_instance_id_falls_back_to_spot_fleet_when_instance_missing(self) -> None:
+        """Edge: a missing on-demand instance resource falls back to Spot Fleet discovery."""
+        cfn_client = Mock()
+
+        def describe_stack_resource(StackName: str, LogicalResourceId: str) -> dict:
+            if LogicalResourceId == "TestInstance":
+                raise ClientError(
+                    error_response={
+                        "Error": {
+                            "Code": "ValidationError",
+                            "Message": "Resource TestInstance does not exist for stack TestStack",
+                        }
+                    },
+                    operation_name="DescribeStackResource",
+                )
+            return {"StackResourceDetail": {"PhysicalResourceId": "sfr-123"}}
+
+        cfn_client.describe_stack_resource.side_effect = describe_stack_resource
+        ec2_client = Mock()
+        ec2_client.describe_spot_fleet_instances.return_value = {
+            "ActiveInstances": [{"InstanceId": "i-spot"}]
+        }
+        ec2_client.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {"InstanceId": "i-spot", "State": {"Name": "running"}}
+                    ]
+                }
+            ]
+        }
+
+        instance_id = resolve_running_instance_id(
+            cfn_client,
+            ec2_client,
+            stack_name="TestStack",
+            spot_fleet_logical_id="TestSpotFleet",
+            instance_logical_id="TestInstance",
+        )
+
+        self.assertEqual("i-spot", instance_id)
 
 
 if __name__ == "__main__":

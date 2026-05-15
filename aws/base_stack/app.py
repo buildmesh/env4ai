@@ -24,6 +24,7 @@ from workstation_core.runtime_resolution import (
 )
 
 _VALID_ACCESS_MODES = frozenset({"ssh", "ssm", "both"})
+_VALID_PURCHASE_MODES = frozenset({"spot", "on_demand"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +88,12 @@ def main() -> None:
         )
     if access_mode in {"ssh", "both"}:
         public_ip_enabled = True
+    purchase_mode = "spot"
+    purchase_mode_context = parse_optional_text_context(app.node.try_get_context("purchase_mode"))
+    if purchase_mode_context is not None:
+        if purchase_mode_context not in _VALID_PURCHASE_MODES:
+            raise RuntimeError("purchase_mode context must be one of: spot, on_demand")
+        purchase_mode = purchase_mode_context
     eip_allocation_id = parse_optional_text_context(app.node.try_get_context("eip_allocation_id"))
     env = cdk.Environment(account=get_account(), region=get_region())
     shared_network_config = get_shared_network_config()
@@ -107,6 +114,7 @@ def main() -> None:
         public_ip_enabled=public_ip_enabled,
         shared_ssm_clients_security_group_id=shared_network.ssm_clients_security_group_id,
         shared_ssm_instance_profile_arn=shared_network.ssm_instance_profile_arn,
+        purchase_mode=purchase_mode,
         environment_spec=ENVIRONMENT_SPEC,
         env=env,
     )

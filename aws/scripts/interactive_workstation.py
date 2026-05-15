@@ -145,6 +145,7 @@ def _run_action_loop(
             stack_name=environment.stack_name,
             spot_fleet_logical_id=environment.spot_fleet_logical_id,
             ssh_alias=environment.ssh_alias,
+            instance_logical_id=environment.instance_logical_id or None,
         )
         _render_status(environment, status)
         current_state = _build_environment_state(status)

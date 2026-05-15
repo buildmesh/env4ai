@@ -42,11 +42,15 @@ def parse_args() -> argparse.Namespace:
     environment_spec = _load_environment_spec_from_cwd()
     default_stack_name = f"{name.capitalize()}WorkstationStack"
     default_spot_fleet_logical_id = f"{name.capitalize()}SpotFleet"
+    default_instance_logical_id = f"{name.capitalize()}Instance"
     default_ssh_alias = f"{name}-workstation"
     default_access_mode = "ssh"
     if environment_spec is not None:
         default_stack_name = str(environment_spec.stack_name)
         default_spot_fleet_logical_id = str(environment_spec.spot_fleet_logical_id)
+        default_instance_logical_id = str(
+            getattr(environment_spec, "instance_logical_id", default_instance_logical_id)
+        )
         default_ssh_alias = str(environment_spec.ssh_alias)
         default_access_mode = str(getattr(environment_spec, "default_access_mode", "ssh"))
 
@@ -73,6 +77,11 @@ def parse_args() -> argparse.Namespace:
         "--spot-fleet-logical-id",
         default=default_spot_fleet_logical_id,
         help="Logical ID of the Spot Fleet resource in the stack.",
+    )
+    parser.add_argument(
+        "--instance-logical-id",
+        default=default_instance_logical_id,
+        help="Logical ID of the on-demand EC2 instance resource in the stack.",
     )
     parser.add_argument(
         "--ssh-host-alias",
@@ -203,6 +212,55 @@ def get_spot_fleet_request_id(
     return physical_id
 
 
+def _is_resource_not_found_error(error: Exception) -> bool:
+    """Return true when a CFN describe_stack_resource call indicates the resource is absent."""
+    response = getattr(error, "response", None)
+    if isinstance(response, dict):
+        message = str(response.get("Error", {}).get("Message", "")).lower()
+        if "does not exist" in message or "not found" in message:
+            return True
+    return "does not exist" in str(error).lower()
+
+
+def get_on_demand_instance(
+    cloudformation_client: Any,
+    ec2_client: Any,
+    stack_name: str,
+    instance_logical_id: str,
+) -> dict[str, Any] | None:
+    """Return on-demand EC2 instance details, or ``None`` when no such resource exists."""
+    try:
+        response = cloudformation_client.describe_stack_resource(
+            StackName=stack_name,
+            LogicalResourceId=instance_logical_id,
+        )
+    except (ClientError, BotoCoreError) as exc:
+        if _is_resource_not_found_error(exc):
+            return None
+        raise RuntimeError(
+            f"Failed to resolve stack resource '{instance_logical_id}' in stack '{stack_name}'."
+        ) from exc
+
+    detail = response.get("StackResourceDetail", {})
+    physical_id = detail.get("PhysicalResourceId")
+    if not physical_id:
+        raise RuntimeError(
+            f"Stack resource '{instance_logical_id}' in stack '{stack_name}' has no physical ID."
+        )
+
+    try:
+        instance_response = ec2_client.describe_instances(InstanceIds=[physical_id])
+    except (ClientError, BotoCoreError) as exc:
+        raise RuntimeError(
+            f"Failed to describe on-demand instance '{physical_id}'."
+        ) from exc
+
+    for reservation in instance_response.get("Reservations", []):
+        for instance in reservation.get("Instances", []):
+            return instance
+    raise RuntimeError(f"On-demand instance '{physical_id}' returned no EC2 record.")
+
+
 def get_newest_instance_for_spot_fleet(ec2_client: Any, spot_fleet_request_id: str) -> dict[str, Any]:
     """Return the newest launched EC2 instance attached to a Spot Fleet request."""
     try:
@@ -277,15 +335,25 @@ def main() -> int:
     cloudformation_client = session.client("cloudformation")
 
     try:
-        spot_fleet_request_id = get_spot_fleet_request_id(
-            cloudformation_client=cloudformation_client,
-            stack_name=args.stack_name,
-            logical_resource_id=args.spot_fleet_logical_id,
-        )
-        instance = get_newest_instance_for_spot_fleet(
-            ec2_client=ec2_client,
-            spot_fleet_request_id=spot_fleet_request_id,
-        )
+        instance: dict[str, Any] | None = None
+        instance_logical_id = normalize_optional(args.instance_logical_id)
+        if instance_logical_id:
+            instance = get_on_demand_instance(
+                cloudformation_client=cloudformation_client,
+                ec2_client=ec2_client,
+                stack_name=args.stack_name,
+                instance_logical_id=instance_logical_id,
+            )
+        if instance is None:
+            spot_fleet_request_id = get_spot_fleet_request_id(
+                cloudformation_client=cloudformation_client,
+                stack_name=args.stack_name,
+                logical_resource_id=args.spot_fleet_logical_id,
+            )
+            instance = get_newest_instance_for_spot_fleet(
+                ec2_client=ec2_client,
+                spot_fleet_request_id=spot_fleet_request_id,
+            )
     except RuntimeError as exc:
         print(f"Error: {exc}")
         return 1

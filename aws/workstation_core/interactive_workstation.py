@@ -31,6 +31,7 @@ class EnvironmentTarget:
     spot_fleet_logical_id: str
     ssh_alias: str
     default_access_mode: str
+    instance_logical_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +133,9 @@ def discover_environments(aws_root: Path, out: TextIO) -> list[EnvironmentTarget
             default_access_mode = (
                 str(getattr(environment_spec, "default_access_mode", "ssh")).strip() or "ssh"
             )
+            instance_logical_id = str(
+                getattr(environment_spec, "instance_logical_id", "") or ""
+            ).strip()
         except Exception as err:
             out.write(f"Warning: skipping '{child.name}' (malformed environment spec: {err})\n")
             continue
@@ -158,6 +162,7 @@ def discover_environments(aws_root: Path, out: TextIO) -> list[EnvironmentTarget
                 spot_fleet_logical_id=spot_fleet_logical_id,
                 ssh_alias=ssh_alias,
                 default_access_mode=default_access_mode,
+                instance_logical_id=instance_logical_id,
             )
         )
 
@@ -448,6 +453,25 @@ def _prompt_access_mode(
         out.write("Access mode must be one of: ssh, ssm, both.\n")
 
 
+def _prompt_purchase_mode(
+    *,
+    input_func: Callable[[str], str],
+    out: TextIO,
+) -> str:
+    """Prompt for EC2 purchase mode, defaulting to ``spot``."""
+    while True:
+        response = input_func(
+            "Purchase mode [spot/on_demand] (default: spot): "
+        ).strip().lower()
+        if not response:
+            return "spot"
+        if response in {"spot", "on_demand"}:
+            return response
+        if response in {"on-demand", "ondemand"}:
+            return "on_demand"
+        out.write("Purchase mode must be one of: spot, on_demand.\n")
+
+
 def _build_deploy_env_overrides(
     environment: EnvironmentTarget,
     *,
@@ -475,9 +499,11 @@ def _build_deploy_env_overrides(
             "SSH-capable access modes require a public IP. Enabling outbound internet access.\n"
         )
         outbound_choice = True
+    purchase_mode = _prompt_purchase_mode(input_func=input_func, out=out)
     return {
         "ACCESS_MODE": access_mode,
         "OUTBOUND_INTERNET": "1" if outbound_choice else "0",
+        "PURCHASE_MODE": purchase_mode,
     }
 
 

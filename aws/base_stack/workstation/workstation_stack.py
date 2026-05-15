@@ -1,6 +1,7 @@
 from aws_cdk import (
     CfnOutput,
     CfnTag,
+    Fn,
     Stack,
     aws_ec2 as ec2,
 )
@@ -10,15 +11,24 @@ from typing import Literal
 from environment_config import ENVIRONMENT_SPEC
 from workstation_core import EnvironmentSpec
 from workstation_core.cdk_helpers import (
+    build_bootstrap_user_data,
     build_spot_fleet_launch_specification,
     resolve_ami_id,
     resolve_subnet_availability_zone,
 )
 
 
+_VALID_PURCHASE_MODES = frozenset({"spot", "on_demand"})
+
+
 def _requires_public_ssh(access_mode: Literal["ssh", "ssm", "both"]) -> bool:
     """Return whether the access mode needs SSH-facing public connectivity."""
     return access_mode in {"ssh", "both"}
+
+
+def _derive_instance_profile_name(instance_profile_arn: str) -> str:
+    """Derive the IAM instance profile name from its ARN at synthesis time."""
+    return Fn.select(1, Fn.split("instance-profile/", instance_profile_arn))
 
 
 class WorkstationStack(Stack):
@@ -42,6 +52,7 @@ class WorkstationStack(Stack):
         public_ip_enabled: bool | None = None,
         shared_ssm_clients_security_group_id: str | None = None,
         shared_ssm_instance_profile_arn: str | None = None,
+        purchase_mode: Literal["spot", "on_demand"] = "spot",
         environment_spec: EnvironmentSpec = ENVIRONMENT_SPEC,
         **kwargs,
     ) -> None:
@@ -66,6 +77,7 @@ class WorkstationStack(Stack):
             public_ip_enabled: Explicit public IPv4 mapping override for outbound access.
             shared_ssm_clients_security_group_id: Shared SSM client SG ID from network stack.
             shared_ssm_instance_profile_arn: Shared SSM instance profile ARN from network stack.
+            purchase_mode: EC2 purchase mode (`spot` for Spot Fleet, `on_demand` for CfnInstance).
             environment_spec: Canonical environment configuration and naming source.
             **kwargs: Additional ``Stack`` keyword args.
         """
@@ -73,6 +85,8 @@ class WorkstationStack(Stack):
 
         if access_mode not in {"ssh", "ssm", "both"}:
             raise ValueError("access_mode must be one of: ssh, ssm, both")
+        if purchase_mode not in _VALID_PURCHASE_MODES:
+            raise ValueError("purchase_mode must be one of: spot, on_demand")
         if access_mode in {"ssm", "both"}:
             if not shared_ssm_clients_security_group_id:
                 raise ValueError(
@@ -199,37 +213,83 @@ class WorkstationStack(Stack):
         if access_mode in {"ssm", "both"} and shared_ssm_clients_security_group_id:
             security_group_ids.append(shared_ssm_clients_security_group_id)
 
-        launch_specification = build_spot_fleet_launch_specification(
-            ami_id=ami_id,
-            instance_type=environment_spec.instance_type,
-            security_group_ids=security_group_ids,
-            subnet_id=local_zone_subnet.ref,
-            volume_size=environment_spec.volume_size,
-            include_bootstrap_user_data=should_include_bootstrap,
-            bootstrap_files=environment_spec.bootstrap_files,
-            key_name="aws_key" if requires_public_ssh else None,
-            iam_instance_profile_arn=(
-                shared_ssm_instance_profile_arn if access_mode in {"ssm", "both"} else None
-            ),
-            verbose_bootstrap_resolution=verbose_bootstrap_resolution,
+        instance_name_tag = environment_spec.construct_id("")
+        instance_iam_profile_arn = (
+            shared_ssm_instance_profile_arn if access_mode in {"ssm", "both"} else None
         )
-        launch_specification["tag_specifications"] = [
-            ec2.CfnSpotFleet.SpotFleetTagSpecificationProperty(
-                resource_type="instance",
-                tags=[
-                    CfnTag(key="Name", value=environment_spec.construct_id("")),
-                ],
+        key_name = "aws_key" if requires_public_ssh else None
+        user_data = (
+            build_bootstrap_user_data(
+                environment_spec.bootstrap_files,
+                verbose_resolution=verbose_bootstrap_resolution,
             )
-        ]
+            if should_include_bootstrap
+            else None
+        )
 
-        # Spot Fleet Request
-        ec2.CfnSpotFleet(self, environment_spec.spot_fleet_logical_id,
-            spot_fleet_request_config_data=ec2.CfnSpotFleet.SpotFleetRequestConfigDataProperty(
-                iam_fleet_role="arn:aws:iam::{}:role/aws-ec2-spot-fleet-tagging-role".format(self.account),
-                target_capacity=1,
-                spot_price=environment_spec.spot_price,
-                launch_specifications=[
-                    ec2.CfnSpotFleet.SpotFleetLaunchSpecificationProperty(**launch_specification)
-                ]
+        if purchase_mode == "on_demand":
+            block_device_mappings = [
+                ec2.CfnInstance.BlockDeviceMappingProperty(
+                    device_name="/dev/sda1",
+                    ebs=ec2.CfnInstance.EbsProperty(
+                        delete_on_termination=True,
+                        volume_size=environment_spec.volume_size,
+                        volume_type="gp3",
+                        encrypted=False,
+                    ),
+                )
+            ]
+            instance_kwargs: dict[str, object] = {
+                "image_id": ami_id,
+                "instance_type": environment_spec.instance_type,
+                "subnet_id": local_zone_subnet.ref,
+                "security_group_ids": list(security_group_ids),
+                "block_device_mappings": block_device_mappings,
+                "tags": [CfnTag(key="Name", value=instance_name_tag)],
+            }
+            if key_name:
+                instance_kwargs["key_name"] = key_name
+            if instance_iam_profile_arn:
+                instance_kwargs["iam_instance_profile"] = _derive_instance_profile_name(
+                    instance_iam_profile_arn
+                )
+            if user_data is not None:
+                instance_kwargs["user_data"] = user_data
+            ec2.CfnInstance(
+                self,
+                environment_spec.instance_logical_id,
+                **instance_kwargs,
             )
-        )
+        else:
+            launch_specification = build_spot_fleet_launch_specification(
+                ami_id=ami_id,
+                instance_type=environment_spec.instance_type,
+                security_group_ids=security_group_ids,
+                subnet_id=local_zone_subnet.ref,
+                volume_size=environment_spec.volume_size,
+                include_bootstrap_user_data=should_include_bootstrap,
+                bootstrap_files=environment_spec.bootstrap_files,
+                key_name=key_name,
+                iam_instance_profile_arn=instance_iam_profile_arn,
+                verbose_bootstrap_resolution=verbose_bootstrap_resolution,
+            )
+            launch_specification["tag_specifications"] = [
+                ec2.CfnSpotFleet.SpotFleetTagSpecificationProperty(
+                    resource_type="instance",
+                    tags=[
+                        CfnTag(key="Name", value=instance_name_tag),
+                    ],
+                )
+            ]
+
+            # Spot Fleet Request
+            ec2.CfnSpotFleet(self, environment_spec.spot_fleet_logical_id,
+                spot_fleet_request_config_data=ec2.CfnSpotFleet.SpotFleetRequestConfigDataProperty(
+                    iam_fleet_role="arn:aws:iam::{}:role/aws-ec2-spot-fleet-tagging-role".format(self.account),
+                    target_capacity=1,
+                    spot_price=environment_spec.spot_price,
+                    launch_specifications=[
+                        ec2.CfnSpotFleet.SpotFleetLaunchSpecificationProperty(**launch_specification)
+                    ]
+                )
+            )

@@ -378,14 +378,82 @@ def resolve_ami_selection(
     return AmiSelectionResult(selected_ami_id=None, should_deploy=True)
 
 
+def _is_resource_not_found_error(error: Exception) -> bool:
+    """Return true when a CFN ``describe_stack_resource`` call indicates absence."""
+    response = getattr(error, "response", None)
+    if isinstance(response, dict):
+        message = str(response.get("Error", {}).get("Message", "")).lower()
+        if "does not exist" in message or "not found" in message:
+            return True
+    return "does not exist" in str(error).lower()
+
+
+def _resolve_on_demand_instance_id(
+    cloudformation_client: Any,
+    ec2_client: Any,
+    *,
+    stack_name: str,
+    instance_logical_id: str,
+) -> str | None:
+    """Return running on-demand instance id from a stack, or ``None`` if absent."""
+    try:
+        stack_resource = cloudformation_client.describe_stack_resource(
+            StackName=stack_name,
+            LogicalResourceId=instance_logical_id,
+        )
+    except Exception as err:
+        if _is_resource_not_found_error(err):
+            return None
+        raise RuntimeError(
+            f"Failed to resolve instance resource '{instance_logical_id}' in stack '{stack_name}'."
+        ) from err
+
+    physical_id = str(
+        stack_resource.get("StackResourceDetail", {}).get("PhysicalResourceId", "")
+    ).strip()
+    if not physical_id:
+        raise RuntimeError(
+            f"Stack resource '{instance_logical_id}' in stack '{stack_name}' has no physical id."
+        )
+
+    try:
+        described = ec2_client.describe_instances(InstanceIds=[physical_id])
+    except Exception as err:
+        raise RuntimeError(
+            f"Failed to describe on-demand instance '{physical_id}'."
+        ) from err
+
+    for reservation in described.get("Reservations", []):
+        for instance in reservation.get("Instances", []):
+            state = str(instance.get("State", {}).get("Name", "")).strip()
+            if state == "running":
+                instance_id = str(instance.get("InstanceId", "")).strip()
+                if instance_id:
+                    return instance_id
+    raise RuntimeError(
+        f"On-demand instance '{physical_id}' is not in the running state."
+    )
+
+
 def resolve_running_instance_id(
     cloudformation_client: Any,
     ec2_client: Any,
     *,
     stack_name: str,
     spot_fleet_logical_id: str,
+    instance_logical_id: str | None = None,
 ) -> str:
-    """Resolve the newest running Spot Fleet instance id for a stack."""
+    """Resolve the running instance id for a stack (spot fleet or on-demand)."""
+    if instance_logical_id:
+        on_demand_instance_id = _resolve_on_demand_instance_id(
+            cloudformation_client,
+            ec2_client,
+            stack_name=stack_name,
+            instance_logical_id=instance_logical_id,
+        )
+        if on_demand_instance_id is not None:
+            return on_demand_instance_id
+
     try:
         stack_resource = cloudformation_client.describe_stack_resource(
             StackName=stack_name,
