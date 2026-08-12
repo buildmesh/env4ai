@@ -12,7 +12,9 @@ _ENVIRONMENT_SPEC = EnvironmentSpec(
         "agents.sh",
         "sprites.sh",
         "aws.sh",
-        "docker.sh"
+        "docker.sh",
+        "go.sh",
+        "dev.sh"
     ),
     default_ami_selector=AmiSelectorConfig(
         owner="099720109477",
@@ -20,8 +22,8 @@ _ENVIRONMENT_SPEC = EnvironmentSpec(
         filters={"architecture": ("x86_64",)},
     ),
     subnet_cidr="10.0.3.0/24",
-    instance_type="t3.small",
-    volume_size=16,
+    instance_type="t3.medium",
+    volume_size=24,
     spot_price="0.1",
     default_access_mode="ssm",
 )
