@@ -219,6 +219,7 @@ cdk deploy -c verbose_bootstrap_resolution=true
 - Region is read from `~/.aws/config` (active profile).
 - Region/account can be overridden with options/environment variables (for example `CDK_DEFAULT_REGION`, `CDK_DEFAULT_ACCOUNT`, and `--region` where supported by scripts/commands).
 - The shared `env4ai` VPC uses `10.0.0.0/16`; each environment must define a unique `subnet_cidr` inside that range.
+- Optionally set `private_ip_address="10.0.5.10"` alongside `subnet_cidr="10.0.5.0/24"` in an environment's `EnvironmentSpec` (for example, `aws/openclaw/environment_config.py`). Both Spot and on-demand instances use this primary internal IPv4 address. Omit the argument or set it to `None` to keep AWS automatic assignment. The address must be available within that subnet; invalid, out-of-subnet, and AWS-reserved addresses are rejected before deployment.
 - `Env4aiNetworkStack` now also owns the shared Systems Manager interface endpoints, SSM security groups, and the EC2 instance role/profile used for Session Manager access.
 - `ACCESS_MODE=ssh` and `ACCESS_MODE=both` keep SSH open on port 22 to anywhere (`0.0.0.0/0`) by default. Set `allowed_ssh_cidr` in an environment's `environment_config.py` to restrict SSH ingress to a specific IPv4 address or CIDR. `ACCESS_MODE=ssm` avoids public SSH ingress.
 - Costs apply while infrastructure is running.

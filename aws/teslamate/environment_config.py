@@ -16,6 +16,7 @@ _ENVIRONMENT_SPEC = EnvironmentSpec(
         filters={"architecture": ("x86_64",)},
     ),
     subnet_cidr="10.0.8.0/24",
+    private_ip_address=None,  # Set an available subnet IPv4 address to pin the internal IP.
     instance_type="t3.small",
     volume_size=20,
     spot_price="0.1",

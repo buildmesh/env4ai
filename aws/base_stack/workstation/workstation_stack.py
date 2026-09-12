@@ -9,7 +9,7 @@ from constructs import Construct
 from typing import Literal
 
 from environment_config import ENVIRONMENT_SPEC
-from workstation_core import EnvironmentSpec
+from workstation_core import EnvironmentSpec, validate_environment_spec
 from workstation_core.cdk_helpers import (
     build_bootstrap_user_data,
     build_spot_fleet_launch_specification,
@@ -82,6 +82,7 @@ class WorkstationStack(Stack):
             **kwargs: Additional ``Stack`` keyword args.
         """
         super().__init__(scope, construct_id, **kwargs)
+        validate_environment_spec(environment_spec)
 
         if access_mode not in {"ssh", "ssm", "both"}:
             raise ValueError("access_mode must be one of: ssh, ssm, both")
@@ -247,6 +248,8 @@ class WorkstationStack(Stack):
                 "block_device_mappings": block_device_mappings,
                 "tags": [CfnTag(key="Name", value=instance_name_tag)],
             }
+            if environment_spec.private_ip_address is not None:
+                instance_kwargs["private_ip_address"] = environment_spec.private_ip_address
             if key_name:
                 instance_kwargs["key_name"] = key_name
             if instance_iam_profile_arn:
@@ -272,6 +275,7 @@ class WorkstationStack(Stack):
                 key_name=key_name,
                 iam_instance_profile_arn=instance_iam_profile_arn,
                 verbose_bootstrap_resolution=verbose_bootstrap_resolution,
+                private_ip_address=environment_spec.private_ip_address,
             )
             launch_specification["tag_specifications"] = [
                 ec2.CfnSpotFleet.SpotFleetTagSpecificationProperty(

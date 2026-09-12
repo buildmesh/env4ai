@@ -198,6 +198,7 @@ def build_spot_fleet_launch_specification(
     key_name: str | None = "aws_key",
     iam_instance_profile_arn: str | None = None,
     verbose_bootstrap_resolution: bool = False,
+    private_ip_address: str | None = None,
 ) -> dict[str, object]:
     """Build a reusable Spot Fleet launch specification payload.
 
@@ -212,6 +213,7 @@ def build_spot_fleet_launch_specification(
         key_name: Optional EC2 key pair name.
         iam_instance_profile_arn: Optional EC2 instance profile ARN.
         verbose_bootstrap_resolution: Whether to print resolved bootstrap paths.
+        private_ip_address: Optional primary private IPv4 address for the instance.
 
     Returns:
         Launch specification payload compatible with CDK Spot Fleet constructs.
@@ -233,6 +235,21 @@ def build_spot_fleet_launch_specification(
             }
         ],
     }
+    if private_ip_address is not None:
+        # Reason: explicit interfaces must own subnet and security group settings.
+        del launch_specification["subnet_id"]
+        del launch_specification["security_groups"]
+        launch_specification["network_interfaces"] = [
+            {
+                "deviceIndex": 0,
+                "deleteOnTermination": True,
+                "subnetId": subnet_id,
+                "groups": list(security_group_ids),
+                "privateIpAddresses": [
+                    {"privateIpAddress": private_ip_address, "primary": True}
+                ],
+            }
+        ]
     if key_name:
         launch_specification["key_name"] = key_name
     if iam_instance_profile_arn:
