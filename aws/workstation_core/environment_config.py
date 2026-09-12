@@ -38,6 +38,7 @@ class EnvironmentSpec:
         volume_size: Root EBS volume size in GiB.
         spot_price: Spot max price as a string (for example ``"0.1"``).
         private_ip_address: Optional primary IPv4 address inside the environment subnet.
+        ssh_authorized_keys: Additional public keys for the default user's SSH access.
     """
 
     environment_key: str
@@ -51,6 +52,7 @@ class EnvironmentSpec:
     default_access_mode: str = "ssh"
     allowed_ssh_cidr: str | None = None
     private_ip_address: str | None = None
+    ssh_authorized_keys: tuple[str, ...] | list[str] = ()
 
     @property
     def stack_name(self) -> str:
@@ -151,6 +153,14 @@ def validate_environment_spec(spec: EnvironmentSpec) -> None:
             "EnvironmentSpec.default_access_mode must be one of: ssh, ssm, both."
         )
     _normalize_allowed_ssh_cidr(spec.allowed_ssh_cidr)
+    if not isinstance(spec.ssh_authorized_keys, (tuple, list)) or any(
+        not isinstance(key, str) or not key.strip() or "\n" in key or "\r" in key
+        for key in spec.ssh_authorized_keys
+    ):
+        raise ValueError(
+            "EnvironmentSpec.ssh_authorized_keys must be a list or tuple of "
+            "non-empty, single-line public key strings."
+        )
     if not spec.default_ami_selector.owner.strip():
         raise ValueError("AmiSelectorConfig.owner must be non-empty.")
     if not spec.default_ami_selector.name.strip():
