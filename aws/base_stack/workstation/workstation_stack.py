@@ -10,6 +10,7 @@ from typing import Literal
 
 from environment_config import ENVIRONMENT_SPEC
 from workstation_core import EnvironmentSpec, validate_environment_spec
+from workstation_core.cloud_init import add_ssh_authorized_keys
 from workstation_core.cdk_helpers import (
     build_bootstrap_user_data,
     build_spot_fleet_launch_specification,
@@ -256,6 +257,7 @@ class WorkstationStack(Stack):
                 instance_kwargs["iam_instance_profile"] = _derive_instance_profile_name(
                     instance_iam_profile_arn
                 )
+            user_data = add_ssh_authorized_keys(user_data, environment_spec.ssh_authorized_keys)
             if user_data is not None:
                 instance_kwargs["user_data"] = user_data
             ec2.CfnInstance(
@@ -276,6 +278,7 @@ class WorkstationStack(Stack):
                 iam_instance_profile_arn=instance_iam_profile_arn,
                 verbose_bootstrap_resolution=verbose_bootstrap_resolution,
                 private_ip_address=environment_spec.private_ip_address,
+                ssh_authorized_keys=environment_spec.ssh_authorized_keys,
             )
             launch_specification["tag_specifications"] = [
                 ec2.CfnSpotFleet.SpotFleetTagSpecificationProperty(

@@ -23,6 +23,7 @@ _ENVIRONMENT_SPEC = EnvironmentSpec(
     ),
     subnet_cidr="10.0.3.0/24",
     private_ip_address=None,  # Set an available subnet IPv4 address to pin the internal IP.
+    ssh_authorized_keys=(),  # Add public key strings for the ubuntu user's SSH access.
     instance_type="t3.medium",
     volume_size=24,
     spot_price="0.1",

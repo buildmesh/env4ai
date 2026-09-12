@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from workstation_core.environment_config import EnvironmentSpec
+from .cloud_init import add_ssh_authorized_keys
+from .environment_config import EnvironmentSpec
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,6 +200,7 @@ def build_spot_fleet_launch_specification(
     iam_instance_profile_arn: str | None = None,
     verbose_bootstrap_resolution: bool = False,
     private_ip_address: str | None = None,
+    ssh_authorized_keys: tuple[str, ...] | list[str] = (),
 ) -> dict[str, object]:
     """Build a reusable Spot Fleet launch specification payload.
 
@@ -214,6 +216,7 @@ def build_spot_fleet_launch_specification(
         iam_instance_profile_arn: Optional EC2 instance profile ARN.
         verbose_bootstrap_resolution: Whether to print resolved bootstrap paths.
         private_ip_address: Optional primary private IPv4 address for the instance.
+        ssh_authorized_keys: Additional public keys for the default user.
 
     Returns:
         Launch specification payload compatible with CDK Spot Fleet constructs.
@@ -254,9 +257,15 @@ def build_spot_fleet_launch_specification(
         launch_specification["key_name"] = key_name
     if iam_instance_profile_arn:
         launch_specification["iam_instance_profile"] = {"arn": iam_instance_profile_arn}
-    if include_bootstrap_user_data:
-        launch_specification["user_data"] = build_bootstrap_user_data(
+    bootstrap_user_data = (
+        build_bootstrap_user_data(
             bootstrap_files,
             verbose_resolution=verbose_bootstrap_resolution,
         )
+        if include_bootstrap_user_data
+        else None
+    )
+    user_data = add_ssh_authorized_keys(bootstrap_user_data, ssh_authorized_keys)
+    if user_data is not None:
+        launch_specification["user_data"] = user_data
     return launch_specification

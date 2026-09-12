@@ -216,6 +216,32 @@ cdk deploy -c verbose_bootstrap_resolution=true
 
 ## Notes
 
+### Additional SSH public keys
+
+Set `ssh_authorized_keys` in an environment's `environment_config.py` to add keys
+to the default user's `~/.ssh/authorized_keys` (`ubuntu` for the supplied images):
+
+```python
+ssh_authorized_keys=(
+    "ssh-ed25519 AAAA... alice@laptop",
+    "ssh-ed25519 AAAA... bob@desktop",
+),
+```
+
+Replace the examples with complete public keys; a Python list is also accepted.
+Omit the argument or leave it empty to preserve existing behavior. Cloud-init adds
+these keys alongside existing keys, including the EC2 key-pair key. This works for
+Spot and on-demand launches, including new instances launched from saved AMIs when
+software bootstrap is skipped. When bootstrap is enabled, multipart user data
+includes both cloud-config and the existing shell script.
+
+Keys are installed during instance initialization, not continuously synchronized.
+Removing an entry does not revoke keys on running instances or remove keys already
+baked into a saved AMI. This setting does not change SSH network access rules or
+the existing EC2 key-pair requirement for SSH access modes.
+
+### Networking and access
+
 - Region is read from `~/.aws/config` (active profile).
 - Region/account can be overridden with options/environment variables (for example `CDK_DEFAULT_REGION`, `CDK_DEFAULT_ACCOUNT`, and `--region` where supported by scripts/commands).
 - The shared `env4ai` VPC uses `10.0.0.0/16`; each environment must define a unique `subnet_cidr` inside that range.

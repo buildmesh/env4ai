@@ -35,6 +35,31 @@ def _load_module(module_name: str, file_path: Path) -> object:
 class EnvironmentSpecTests(unittest.TestCase):
     """Validate environment naming derivation and validation logic."""
 
+    def test_ssh_authorized_keys_accepts_lists_tuples_and_empty_values(self) -> None:
+        """Expected and edge: multiple keys and empty collections are accepted."""
+        spec, _, _ = self._load_environment_specs()
+        self.assertEqual(spec.ssh_authorized_keys, ())
+        for keys in ((), [], ("ssh-ed25519 AAAA alice",), ["ssh-rsa AAAA bob"]):
+            with self.subTest(keys=keys):
+                validate_environment_spec(replace(spec, ssh_authorized_keys=keys))
+
+    def test_ssh_authorized_keys_rejects_invalid_collections_and_lines(self) -> None:
+        """Failure: reject bare strings, blanks, non-strings and multiline entries."""
+        spec, _, _ = self._load_environment_specs()
+        for keys in (
+            None,
+            "ssh-ed25519 AAAA",
+            ("",),
+            ("  ",),
+            (42,),
+            ("key\nsecond",),
+            ("key\rsecond",),
+        ):
+            with self.subTest(keys=keys), self.assertRaisesRegex(
+                ValueError, "ssh_authorized_keys must be a list or tuple"
+            ):
+                validate_environment_spec(replace(spec, ssh_authorized_keys=keys))
+
     def test_private_ip_address_accepts_usable_subnet_addresses(self) -> None:
         """Expected and edge: ordinary and boundary usable addresses are valid."""
         spec, _, _ = self._load_environment_specs()
