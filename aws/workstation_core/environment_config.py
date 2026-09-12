@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import ipaddress
-from typing import Mapping
+from collections.abc import Mapping
+from dataclasses import dataclass
 
 from workstation_core.config import get_shared_network_config
 
@@ -37,6 +37,7 @@ class EnvironmentSpec:
         instance_type: EC2 instance type for Spot launch.
         volume_size: Root EBS volume size in GiB.
         spot_price: Spot max price as a string (for example ``"0.1"``).
+        private_ip_address: Optional primary IPv4 address inside the environment subnet.
     """
 
     environment_key: str
@@ -49,6 +50,7 @@ class EnvironmentSpec:
     spot_price: str
     default_access_mode: str = "ssh"
     allowed_ssh_cidr: str | None = None
+    private_ip_address: str | None = None
 
     @property
     def stack_name(self) -> str:
@@ -167,3 +169,18 @@ def validate_environment_spec(spec: EnvironmentSpec) -> None:
             "EnvironmentSpec.subnet_cidr must fit within the shared VPC CIDR "
             f"{shared_network.with_prefixlen}."
         )
+
+    if spec.private_ip_address is not None:
+        try:
+            private_ip = ipaddress.IPv4Address(spec.private_ip_address)
+        except ValueError as exc:
+            raise ValueError(
+                "EnvironmentSpec.private_ip_address must be a valid IPv4 address."
+            ) from exc
+        if private_ip not in subnet_network:
+            raise ValueError("EnvironmentSpec.private_ip_address must be within subnet_cidr.")
+        # Reason: AWS reserves the first four addresses and the last subnet address.
+        if int(private_ip) - int(subnet_network.network_address) < 4 or (
+            private_ip == subnet_network.broadcast_address
+        ):
+            raise ValueError("EnvironmentSpec.private_ip_address is reserved by AWS.")

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
-from pathlib import Path
 import unittest
+from dataclasses import replace
+from pathlib import Path
 
 from workstation_core import (
     AmiSelectorConfig,
@@ -33,6 +34,32 @@ def _load_module(module_name: str, file_path: Path) -> object:
 
 class EnvironmentSpecTests(unittest.TestCase):
     """Validate environment naming derivation and validation logic."""
+
+    def test_private_ip_address_accepts_usable_subnet_addresses(self) -> None:
+        """Expected and edge: ordinary and boundary usable addresses are valid."""
+        spec, _, _ = self._load_environment_specs()
+        self.assertIsNone(spec.private_ip_address)
+        for address in (None, "10.0.1.10", "10.0.1.4", "10.0.1.254"):
+            with self.subTest(address=address):
+                validate_environment_spec(replace(spec, private_ip_address=address))
+
+    def test_private_ip_address_rejects_invalid_addresses(self) -> None:
+        """Failure: malformed, outside-subnet and reserved addresses fail early."""
+        spec, _, _ = self._load_environment_specs()
+        for address, error in (
+            ("", "valid IPv4"),
+            ("not-an-ip", "valid IPv4"),
+            ("::1", "valid IPv4"),
+            ("10.0.1.10/24", "valid IPv4"),
+            ("10.0.2.10", "within subnet_cidr"),
+            ("10.0.1.0", "reserved by AWS"),
+            ("10.0.1.1", "reserved by AWS"),
+            ("10.0.1.2", "reserved by AWS"),
+            ("10.0.1.3", "reserved by AWS"),
+            ("10.0.1.255", "reserved by AWS"),
+        ):
+            with self.subTest(address=address), self.assertRaisesRegex(ValueError, error):
+                validate_environment_spec(replace(spec, private_ip_address=address))
 
     @staticmethod
     def _load_environment_specs() -> tuple[EnvironmentSpec, EnvironmentSpec, EnvironmentSpec]:
